@@ -13,9 +13,12 @@ import io
 import base64
 import datetime
 from typing import Dict, Tuple
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyBboxPatch
+import matplotlib.patheffects as pe
 
 
 # ======================================
@@ -275,10 +278,6 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(66, 153, 225, 0.6) !important;
     }
     
-    /* Plotly chart background */
-    .js-plotly-plot .plotly {
-        background: transparent !important;
-    }
     
     /* Metric styling */
     [data-testid="metric-container"] {
@@ -711,320 +710,340 @@ def prediksi_lgbm(model, input_data):
 # CHART FUNCTIONS
 # ======================================
 
-def chart_colors():
-    return {
-        'bg': 'rgba(0,0,0,0)',
-        'grid': 'rgba(255,255,255,0.1)',
-        'text': '#e2e8f0',
-        'subtext': '#a0aec0',
-        'blue': '#4299e1',
-        'purple': '#9f7aea',
-        'green': '#48bb78',
-        'orange': '#ed8936',
-        'red': '#fc8181',
-        'yellow': '#f6e05e',
-    }
+def set_dark_style():
+    plt.rcParams.update({
+        'figure.facecolor': '#1a1a2e',
+        'axes.facecolor': '#16213e',
+        'axes.edgecolor': 'rgba(255,255,255,0.2)',
+        'axes.labelcolor': '#a0aec0',
+        'text.color': '#e2e8f0',
+        'xtick.color': '#a0aec0',
+        'ytick.color': '#a0aec0',
+        'grid.color': 'rgba(255,255,255,0.08)',
+        'grid.linestyle': '--',
+        'font.family': 'DejaVu Sans',
+    })
 
 
-def buat_radar_chart(skor_subtes: Dict, bobot: Dict, jurusan: str) -> go.Figure:
-    """Radar chart untuk skor TPS"""
-    c = chart_colors()
-    labels = list(SUBTES_LABELS.values())
-    keys = list(SUBTES_LABELS.keys())
+def buat_gauge_html(nilai: float, judul: str, max_val: float = 100) -> str:
+    """Buat gauge menggunakan HTML/CSS — tidak butuh library eksternal"""
+    pct = min(nilai / max_val, 1.0)
+    deg = pct * 180  # 0-180 derajat
+    if pct >= 0.70:
+        color = "#48bb78"
+        label_color = "#48bb78"
+    elif pct >= 0.50:
+        color = "#f6e05e"
+        label_color = "#f6e05e"
+    else:
+        color = "#fc8181"
+        label_color = "#fc8181"
 
-    nilai = [skor_subtes[k] for k in keys]
-    bobot_scaled = [bobot[k] * SKOR_MAX_UTBK for k in keys]
+    display_val = f"{nilai:.0f}"
 
-    fig = go.Figure()
-
-    # Bobot target (sebagai referensi)
-    fig.add_trace(go.Scatterpolar(
-        r=bobot_scaled,
-        theta=labels,
-        fill='toself',
-        name=f'Bobot Target ({jurusan})',
-        line=dict(color=c['purple'], width=2),
-        fillcolor='rgba(159, 122, 234, 0.15)',
-        marker=dict(size=6)
-    ))
-
-    # Skor aktual
-    fig.add_trace(go.Scatterpolar(
-        r=nilai,
-        theta=labels,
-        fill='toself',
-        name='Skor Kamu',
-        line=dict(color=c['blue'], width=3),
-        fillcolor='rgba(66, 153, 225, 0.25)',
-        marker=dict(size=8, color=c['blue'])
-    ))
-
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True, range=[0, SKOR_MAX_UTBK],
-                gridcolor=c['grid'], tickfont=dict(color=c['subtext'], size=10),
-                tickvals=[200, 400, 600, 800, 1000]
-            ),
-            angularaxis=dict(tickfont=dict(color=c['text'], size=11))
-        ),
-        showlegend=True,
-        legend=dict(
-            bgcolor='rgba(0,0,0,0.3)', bordercolor='rgba(255,255,255,0.2)',
-            borderwidth=1, font=dict(color=c['text'], size=11)
-        ),
-        paper_bgcolor=c['bg'],
-        plot_bgcolor=c['bg'],
-        title=dict(text=f"📡 Profil TPS vs Bobot Jurusan {jurusan}", font=dict(color=c['text'], size=14)),
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=420
-    )
-    return fig
+    return f"""
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+                border-radius:16px;padding:16px 12px;text-align:center;">
+        <p style="color:#a0aec0;font-size:0.78rem;font-weight:600;text-transform:uppercase;
+                  letter-spacing:0.8px;margin:0 0 10px;">{judul}</p>
+        <div style="position:relative;width:120px;height:65px;margin:0 auto 8px;">
+            <!-- Track background -->
+            <svg viewBox="0 0 120 65" style="width:100%;height:100%;">
+                <path d="M10,60 A50,50,0,0,1,110,60" fill="none" stroke="rgba(255,255,255,0.08)"
+                      stroke-width="10" stroke-linecap="round"/>
+                <!-- Red zone 0-40% -->
+                <path d="M10,60 A50,50,0,0,1,{_gauge_point(0.0,50)},{_gauge_point(0.0,50,y=True)}"
+                      fill="none" stroke="rgba(252,129,129,0.2)" stroke-width="10" stroke-linecap="butt"/>
+                <!-- Filled arc -->
+                <path d="M10,60 A50,50,0,{'1' if deg > 90 else '0'},1,{_gauge_point(pct,50)},{_gauge_point(pct,50,y=True)}"
+                      fill="none" stroke="{color}" stroke-width="10" stroke-linecap="round"
+                      style="filter:drop-shadow(0 0 4px {color}88);"/>
+            </svg>
+            <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+                        font-size:1.5rem;font-weight:800;color:{label_color};line-height:1;">
+                {display_val}
+            </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin:0 8px;">
+            <span style="color:#718096;font-size:0.65rem;">0</span>
+            <span style="color:#718096;font-size:0.65rem;">{max_val:.0f}</span>
+        </div>
+    </div>"""
 
 
-def buat_bar_skor_subtes(skor_subtes: Dict, bobot: Dict) -> go.Figure:
-    """Bar chart perbandingan skor subtes dengan bobot"""
-    c = chart_colors()
+def _gauge_point(pct, r, y=False):
+    """Helper untuk koordinat titik di busur gauge"""
+    import math
+    angle = math.pi - pct * math.pi  # dari kiri ke kanan
+    cx, cy = 60, 60
+    if y:
+        return round(cy - r * math.sin(angle), 2)
+    return round(cx + r * math.cos(angle), 2)
+
+
+def buat_radar_chart(skor_subtes: Dict, bobot: Dict, jurusan: str):
+    """Radar chart menggunakan matplotlib"""
+    set_dark_style()
     keys = list(SUBTES_LABELS.keys())
     labels = [k for k in keys]
+    N = len(keys)
+    
     nilai = [skor_subtes[k] for k in keys]
-    bobot_vals = [bobot[k] * 100 for k in keys]  # dalam %
-
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    # Bar skor
-    fig.add_trace(go.Bar(
-        name='Skor Subtes',
-        x=labels, y=nilai,
-        marker=dict(
-            color=[f'rgba(66,153,225,{0.6 + (v/SKOR_MAX_UTBK)*0.4})' for v in nilai],
-            line=dict(color='rgba(99,179,237,0.8)', width=1)
-        ),
-        text=[f"{v}" for v in nilai],
-        textposition='outside',
-        textfont=dict(color=c['text'], size=11, family='Inter'),
-    ), secondary_y=False)
-
-    # Line bobot
-    fig.add_trace(go.Scatter(
-        name='Bobot Jurusan (%)',
-        x=labels, y=bobot_vals,
-        mode='lines+markers+text',
-        line=dict(color=c['orange'], width=3, dash='dash'),
-        marker=dict(size=10, color=c['orange'], symbol='diamond'),
-        text=[f"{v:.0f}%" for v in bobot_vals],
-        textposition='top center',
-        textfont=dict(color=c['orange'], size=10)
-    ), secondary_y=True)
-
-    fig.update_xaxes(
-        tickfont=dict(color=c['text'], size=11),
-        gridcolor=c['grid']
-    )
-    fig.update_yaxes(
-        title_text="Skor (0-1000)", secondary_y=False,
-        range=[0, SKOR_MAX_UTBK + 100],
-        tickfont=dict(color=c['text']), gridcolor=c['grid'],
-        title_font=dict(color=c['subtext'])
-    )
-    fig.update_yaxes(
-        title_text="Bobot Jurusan (%)", secondary_y=True,
-        range=[0, 60], ticksuffix="%",
-        tickfont=dict(color=c['orange']),
-        title_font=dict(color=c['orange']),
-        showgrid=False
-    )
-    fig.update_layout(
-        paper_bgcolor=c['bg'], plot_bgcolor=c['bg'],
-        legend=dict(bgcolor='rgba(0,0,0,0.3)', bordercolor='rgba(255,255,255,0.2)',
-                    borderwidth=1, font=dict(color=c['text'])),
-        title=dict(text="📊 Skor Subtes & Bobot Jurusan", font=dict(color=c['text'], size=14)),
-        margin=dict(l=10, r=10, t=60, b=10),
-        height=380,
-        bargap=0.3
-    )
+    bobot_scaled = [bobot[k] * SKOR_MAX_UTBK for k in keys]
+    
+    # Angles
+    angles = [n / float(N) * 2 * np.pi for n in range(N)]
+    angles += angles[:1]
+    nilai_plot = nilai + [nilai[0]]
+    bobot_plot = bobot_scaled + [bobot_scaled[0]]
+    
+    fig, ax = plt.subplots(figsize=(6, 5), subplot_kw=dict(polar=True),
+                            facecolor='#1a1a2e')
+    ax.set_facecolor('#16213e')
+    
+    # Grid rings
+    ax.set_ylim(0, SKOR_MAX_UTBK)
+    ax.set_yticks([200, 400, 600, 800, 1000])
+    ax.set_yticklabels(['200', '400', '600', '800', '1000'], color='#4a5568', fontsize=7)
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels, color='#e2e8f0', fontsize=9.5, fontweight='bold')
+    ax.grid(color='rgba(255,255,255,0.08)', linewidth=0.8)
+    ax.spines['polar'].set_color('rgba(255,255,255,0.15)')
+    
+    # Bobot target
+    ax.fill(angles, bobot_plot, alpha=0.15, color='#9f7aea')
+    ax.plot(angles, bobot_plot, color='#9f7aea', linewidth=2, linestyle='--',
+            label=f'Bobot ({jurusan})')
+    ax.scatter(angles[:-1], bobot_scaled, color='#9f7aea', s=40, zorder=5)
+    
+    # Skor aktual
+    ax.fill(angles, nilai_plot, alpha=0.25, color='#4299e1')
+    ax.plot(angles, nilai_plot, color='#4299e1', linewidth=2.5, label='Skor Kamu')
+    ax.scatter(angles[:-1], nilai, color='#63b3ed', s=60, zorder=5,
+               edgecolors='white', linewidths=0.8)
+    
+    ax.legend(loc='upper right', bbox_to_anchor=(1.35, 1.15),
+              facecolor='#1a1a2e', edgecolor='rgba(255,255,255,0.2)',
+              labelcolor='#e2e8f0', fontsize=8.5)
+    
+    ax.set_title(f'Profil TPS vs Bobot Jurusan', color='#e2e8f0',
+                 fontsize=11, fontweight='bold', pad=18)
+    
+    plt.tight_layout()
     return fig
 
 
-def buat_bar_peluang_kampus(skor_akademik: float) -> go.Figure:
-    """Bar chart perbandingan skor vs semua klaster"""
-    c = chart_colors()
+def buat_bar_skor_subtes(skor_subtes: Dict, bobot: Dict):
+    """Bar chart skor subtes + line bobot menggunakan matplotlib"""
+    set_dark_style()
+    keys = list(SUBTES_LABELS.keys())
+    nilai = [skor_subtes[k] for k in keys]
+    bobot_vals = [bobot[k] * 100 for k in keys]
     
-    kampus_list = []
-    skor_min_list = []
-    skor_max_list = []
-    warna_list = []
-    color_map = {"klaster_1": c['red'], "klaster_2": c['orange'],
-                 "klaster_3": c['yellow'], "klaster_4": c['green']}
+    x = np.arange(len(keys))
+    fig, ax1 = plt.subplots(figsize=(9, 4.5), facecolor='#1a1a2e')
+    ax1.set_facecolor('#16213e')
+    
+    # Bar skor dengan gradient warna
+    bar_colors = [plt.cm.Blues(0.4 + (v / SKOR_MAX_UTBK) * 0.5) for v in nilai]
+    bars = ax1.bar(x, nilai, color=bar_colors, width=0.5,
+                   edgecolor='#63b3ed', linewidth=0.8, zorder=3)
+    
+    # Label skor di atas bar
+    for bar, v in zip(bars, nilai):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 12,
+                 f'{v}', ha='center', va='bottom', color='#e2e8f0',
+                 fontsize=9.5, fontweight='bold')
+    
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(keys, color='#e2e8f0', fontsize=10, fontweight='bold')
+    ax1.set_ylabel('Skor TPS (0-1000)', color='#63b3ed', fontsize=9)
+    ax1.set_ylim(0, SKOR_MAX_UTBK + 150)
+    ax1.tick_params(axis='y', colors='#63b3ed')
+    ax1.grid(axis='y', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax1.spines[['top','right']].set_visible(False)
+    ax1.spines['left'].set_color('#63b3ed')
+    ax1.spines['bottom'].set_color('rgba(255,255,255,0.2)')
+    
+    # Line bobot (secondary axis)
+    ax2 = ax1.twinx()
+    ax2.plot(x, bobot_vals, color='#ed8936', linewidth=2.5, linestyle='--',
+             marker='D', markersize=8, label='Bobot (%)', zorder=4)
+    for xi, bv in zip(x, bobot_vals):
+        ax2.text(xi, bv + 2, f'{bv:.0f}%', ha='center', va='bottom',
+                 color='#ed8936', fontsize=8.5, fontweight='bold')
+    ax2.set_ylabel('Bobot Jurusan (%)', color='#ed8936', fontsize=9)
+    ax2.set_ylim(0, 60)
+    ax2.tick_params(axis='y', colors='#ed8936')
+    ax2.spines[['top','left']].set_visible(False)
+    ax2.spines['right'].set_color('#ed8936')
+    ax2.spines['bottom'].set_color('rgba(255,255,255,0.2)')
+    
+    # Legend
+    from matplotlib.lines import Line2D
+    leg_elements = [
+        mpatches.Patch(facecolor='#4299e1', label='Skor Subtes'),
+        Line2D([0], [0], color='#ed8936', linewidth=2.5, linestyle='--',
+               marker='D', markersize=6, label='Bobot Jurusan (%)'),
+    ]
+    ax1.legend(handles=leg_elements, loc='upper right',
+               facecolor='#1a1a2e', edgecolor='rgba(255,255,255,0.2)',
+               labelcolor='#e2e8f0', fontsize=8.5)
+    
+    ax1.set_title('Skor Subtes & Bobot Jurusan', color='#e2e8f0',
+                  fontsize=11, fontweight='bold', pad=12)
+    plt.tight_layout()
+    return fig
 
+
+def buat_bar_peluang_kampus(skor_akademik: float):
+    """Bar chart posisi skor vs zona aman semua PTN"""
+    set_dark_style()
+    
+    kampus_list, smin_list, smax_list, color_list = [], [], [], []
+    cmap = {"klaster_1": "#fc8181", "klaster_2": "#ed8936",
+            "klaster_3": "#f6e05e", "klaster_4": "#48bb78"}
+    
     for kid, kdata in PTN_DATA.items():
         for univ in kdata["universitas"]:
-            kampus_list.append(univ.split("(")[0].strip()[:20])
-            skor_min_list.append(kdata["skor_aman"][0])
-            skor_max_list.append(kdata["skor_aman"][1])
-            warna_list.append(color_map[kid])
-
-    fig = go.Figure()
-
-    # Range skor aman (min to max)
-    fig.add_trace(go.Bar(
-        name='Rentang Skor Aman',
-        x=kampus_list,
-        y=[mx - mn for mx, mn in zip(skor_max_list, skor_min_list)],
-        base=skor_min_list,
-        marker=dict(color=[w.replace(')', ',0.3)').replace('rgb', 'rgba') for w in warna_list],
-                    line=dict(color=warna_list, width=1)),
-        text=[f"{mn}-{mx}" for mn, mx in zip(skor_min_list, skor_max_list)],
-        textposition='inside',
-        textfont=dict(size=9, color='rgba(255,255,255,0.8)'),
-        hovertemplate='%{x}<br>Zona Aman: %{base} - %{y}<extra></extra>'
-    ))
-
+            nm = univ.split("(")[0].strip()
+            nm = nm[:16] + "…" if len(nm) > 16 else nm
+            kampus_list.append(nm)
+            smin_list.append(kdata["skor_aman"][0])
+            smax_list.append(kdata["skor_aman"][1])
+            color_list.append(cmap[kid])
+    
+    n = len(kampus_list)
+    x = np.arange(n)
+    
+    fig, ax = plt.subplots(figsize=(12, 5), facecolor='#1a1a2e')
+    ax.set_facecolor('#16213e')
+    
+    # Bar zona aman (dari min ke max)
+    ranges = [mx - mn for mx, mn in zip(smax_list, smin_list)]
+    bars = ax.bar(x, ranges, bottom=smin_list, color=color_list,
+                  alpha=0.6, width=0.65, edgecolor=color_list, linewidth=1.2, zorder=3)
+    
+    # Label zona di dalam bar
+    for bar, smin, smax, col in zip(bars, smin_list, smax_list, color_list):
+        mid = smin + (smax - smin) / 2
+        ax.text(bar.get_x() + bar.get_width()/2, mid, f'{smin}–{smax}',
+                ha='center', va='center', color='white', fontsize=7, fontweight='bold')
+    
     # Garis skor kamu
-    fig.add_hline(
-        y=skor_akademik, line_dash="solid",
-        line_color=c['blue'], line_width=3,
-        annotation_text=f"Skor Kamu: {skor_akademik:.0f}",
-        annotation_font_color=c['blue'],
-        annotation_font_size=12,
-        annotation_bgcolor='rgba(66,153,225,0.2)'
-    )
-
-    fig.update_layout(
-        paper_bgcolor=c['bg'], plot_bgcolor=c['bg'],
-        xaxis=dict(tickfont=dict(color=c['text'], size=9), tickangle=-45,
-                   gridcolor=c['grid']),
-        yaxis=dict(tickfont=dict(color=c['text']), gridcolor=c['grid'],
-                   title_text="Skor UTBK (0-1000)", title_font=dict(color=c['subtext']),
-                   range=[400, 1000]),
-        title=dict(text="🏛️ Posisi Skor vs Zona Aman Semua PTN", font=dict(color=c['text'], size=14)),
-        legend=dict(bgcolor='rgba(0,0,0,0.3)', font=dict(color=c['text'])),
-        margin=dict(l=10, r=10, t=60, b=100),
-        height=420
-    )
+    ax.axhline(y=skor_akademik, color='#4299e1', linewidth=2.5, linestyle='-', zorder=5)
+    ax.text(n - 0.3, skor_akademik + 8, f'  Skormu: {skor_akademik:.0f}',
+            color='#4299e1', fontsize=10, fontweight='bold', va='bottom')
+    
+    ax.set_xticks(x)
+    ax.set_xticklabels(kampus_list, rotation=45, ha='right', color='#e2e8f0', fontsize=8)
+    ax.set_ylabel('Skor UTBK', color='#a0aec0', fontsize=9)
+    ax.set_ylim(400, 1050)
+    ax.tick_params(axis='y', colors='#a0aec0')
+    ax.grid(axis='y', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax.spines[['top','right']].set_visible(False)
+    ax.spines['left'].set_color('rgba(255,255,255,0.2)')
+    ax.spines['bottom'].set_color('rgba(255,255,255,0.2)')
+    
+    # Legend klaster
+    legend_patches = [
+        mpatches.Patch(facecolor='#fc8181', alpha=0.7, label='Klaster 1 (Top Tier)'),
+        mpatches.Patch(facecolor='#ed8936', alpha=0.7, label='Klaster 2 (Menengah Atas)'),
+        mpatches.Patch(facecolor='#f6e05e', alpha=0.7, label='Klaster 3 (Menengah)'),
+        mpatches.Patch(facecolor='#48bb78', alpha=0.7, label='Klaster 4 (Regional)'),
+    ]
+    ax.legend(handles=legend_patches, loc='upper left',
+              facecolor='#1a1a2e', edgecolor='rgba(255,255,255,0.2)',
+              labelcolor='#e2e8f0', fontsize=8)
+    
+    ax.set_title('Posisi Skor vs Zona Aman Semua PTN', color='#e2e8f0',
+                 fontsize=11, fontweight='bold', pad=12)
+    plt.tight_layout()
     return fig
 
 
-def buat_gauge_chart(nilai: float, judul: str, min_val=0, max_val=100) -> go.Figure:
-    c = chart_colors()
-    pct = (nilai - min_val) / (max_val - min_val) * 100
-    
-    if pct >= 70: color = c['green']
-    elif pct >= 50: color = c['yellow']
-    else: color = c['red']
-    
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=nilai,
-        title={'text': judul, 'font': {'color': c['text'], 'size': 13}},
-        number={'font': {'color': c['text'], 'size': 28}, 'suffix': ""},
-        gauge={
-            'axis': {'range': [min_val, max_val], 'tickcolor': c['subtext'],
-                     'tickfont': {'color': c['subtext'], 'size': 10}},
-            'bar': {'color': color, 'thickness': 0.75},
-            'bgcolor': 'rgba(255,255,255,0.05)',
-            'borderwidth': 0,
-            'steps': [
-                {'range': [min_val, min_val + (max_val-min_val)*0.4], 'color': 'rgba(252,129,129,0.15)'},
-                {'range': [min_val + (max_val-min_val)*0.4, min_val + (max_val-min_val)*0.7], 'color': 'rgba(246,224,94,0.15)'},
-                {'range': [min_val + (max_val-min_val)*0.7, max_val], 'color': 'rgba(72,187,120,0.15)'},
-            ],
-            'threshold': {
-                'line': {'color': "white", 'width': 2},
-                'thickness': 0.85,
-                'value': nilai
-            }
-        }
-    ))
-    fig.update_layout(
-        paper_bgcolor=c['bg'], plot_bgcolor=c['bg'],
-        margin=dict(l=20, r=20, t=40, b=20),
-        height=220,
-        font=dict(family='Inter')
-    )
-    return fig
-
-
-def buat_pipeline_subtes(skor_subtes: Dict, bobot: Dict) -> go.Figure:
-    """Pipeline comparison: skor aktual vs kontribusi tertimbang"""
-    c = chart_colors()
+def buat_pipeline_subtes(skor_subtes: Dict, bobot: Dict):
+    """Pipeline horizontal kontribusi tertimbang"""
+    set_dark_style()
     keys = list(SUBTES_LABELS.keys())
     labels = [SUBTES_LABELS[k] for k in keys]
-    
-    skor_raw = [skor_subtes[k] for k in keys]
     kontribusi = [skor_subtes[k] * bobot[k] for k in keys]
     bobot_pct = [bobot[k] * 100 for k in keys]
     
-    # Sort by kontribusi descending
-    sorted_data = sorted(zip(labels, skor_raw, kontribusi, bobot_pct), key=lambda x: x[2], reverse=True)
-    labels_s, skor_s, kontrib_s, bobot_s = zip(*sorted_data)
-
-    fig = go.Figure()
+    # Sort dari terbesar
+    sorted_data = sorted(zip(labels, kontribusi, bobot_pct), key=lambda x: x[1], reverse=True)
+    labels_s, kontrib_s, bobot_s = zip(*sorted_data)
     
-    # Kontribusi bar (horizontal)
-    fig.add_trace(go.Bar(
-        y=list(labels_s),
-        x=list(kontrib_s),
-        orientation='h',
-        name='Kontribusi Tertimbang',
-        marker=dict(
-            color=[f'rgba(99,179,237,{0.4 + (k/max(kontrib_s))*0.6})' for k in kontrib_s],
-            line=dict(color='rgba(99,179,237,0.9)', width=1.5)
-        ),
-        text=[f"  {v:.0f} pts ({b:.0f}% bobot)" for v, b in zip(kontrib_s, bobot_s)],
-        textposition='outside',
-        textfont=dict(color=c['text'], size=10),
-        hovertemplate='%{y}<br>Kontribusi: %{x:.1f}<br><extra></extra>'
-    ))
-
-    fig.update_layout(
-        paper_bgcolor=c['bg'], plot_bgcolor=c['bg'],
-        xaxis=dict(tickfont=dict(color=c['subtext'], size=10), gridcolor=c['grid'],
-                   title_text="Kontribusi Skor (Skor × Bobot)", title_font=dict(color=c['subtext'])),
-        yaxis=dict(tickfont=dict(color=c['text'], size=11), gridcolor='rgba(0,0,0,0)'),
-        title=dict(text="🔀 Pipeline: Kontribusi Tertimbang Setiap Subtes", font=dict(color=c['text'], size=14)),
-        margin=dict(l=10, r=120, t=60, b=20),
-        height=360,
-        showlegend=False
-    )
+    fig, ax = plt.subplots(figsize=(8, 4), facecolor='#1a1a2e')
+    ax.set_facecolor('#16213e')
+    
+    y = np.arange(len(labels_s))
+    max_k = max(kontrib_s)
+    bar_colors = [plt.cm.Blues(0.35 + (k / max_k) * 0.55) for k in kontrib_s]
+    
+    bars = ax.barh(y, kontrib_s, color=bar_colors, height=0.6,
+                   edgecolor='#63b3ed', linewidth=0.8, zorder=3)
+    
+    # Label di kanan bar
+    for bar, kv, bv in zip(bars, kontrib_s, bobot_s):
+        ax.text(bar.get_width() + max_k * 0.01, bar.get_y() + bar.get_height()/2,
+                f'{kv:.0f} pts  ({bv:.0f}% bobot)',
+                va='center', ha='left', color='#e2e8f0', fontsize=8.5)
+    
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels_s, color='#e2e8f0', fontsize=9)
+    ax.set_xlabel('Kontribusi Tertimbang (Skor × Bobot)', color='#a0aec0', fontsize=9)
+    ax.set_xlim(0, max_k * 1.55)
+    ax.tick_params(axis='x', colors='#a0aec0')
+    ax.grid(axis='x', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax.spines[['top','right']].set_visible(False)
+    ax.spines['left'].set_color('rgba(255,255,255,0.15)')
+    ax.spines['bottom'].set_color('rgba(255,255,255,0.15)')
+    ax.set_title('Pipeline: Kontribusi Tertimbang Setiap Subtes', color='#e2e8f0',
+                 fontsize=11, fontweight='bold', pad=12)
+    plt.tight_layout()
     return fig
 
 
-def buat_bar_kebiasaan(data: Dict) -> go.Figure:
+def buat_bar_kebiasaan(data: Dict):
     """Bar chart kebiasaan belajar"""
-    c = chart_colors()
-    
-    labels = ["Jam Belajar", "Hari/Minggu", "Latihan Soal", "Tryout/Bulan", "Review Soal"]
+    set_dark_style()
+    labels = ["Jam Belajar", "Hari/Minggu", "Latihan Soal", "Tryout/Bln", "Review Soal"]
     nilai = [data['jam_belajar'], data['hari_belajar'], data['latihan_soal'],
              data['frekuensi_tryout'], data['review_soal']]
     
-    bar_colors = [c['green'] if v >= 4 else c['yellow'] if v >= 3 else c['red'] for v in nilai]
-
-    fig = go.Figure(go.Bar(
-        x=labels, y=nilai,
-        marker=dict(color=[c.replace(')', ',0.8)').replace('rgb', 'rgba') for c in bar_colors],
-                    line=dict(color=bar_colors, width=1.5)),
-        text=[f"{v}/5" for v in nilai],
-        textposition='outside',
-        textfont=dict(color=c['text'], size=12)
-    ))
-
-    # Target line
-    fig.add_hline(y=4, line_dash="dash", line_color=c['green'], line_width=2,
-                  annotation_text="Target Ideal (4/5)",
-                  annotation_font_color=c['green'])
-
-    fig.update_layout(
-        paper_bgcolor=c['bg'], plot_bgcolor=c['bg'],
-        xaxis=dict(tickfont=dict(color=c['text'], size=11), gridcolor=c['grid']),
-        yaxis=dict(tickfont=dict(color=c['text']), gridcolor=c['grid'],
-                   range=[0, 6], title_text="Level (1-5)", title_font=dict(color=c['subtext'])),
-        title=dict(text="📚 Level Kebiasaan Belajar", font=dict(color=c['text'], size=14)),
-        margin=dict(l=10, r=10, t=60, b=20),
-        height=300,
-        showlegend=False,
-        bargap=0.3
-    )
+    colors = ['#48bb78' if v >= 4 else '#f6e05e' if v >= 3 else '#fc8181' for v in nilai]
+    
+    fig, ax = plt.subplots(figsize=(7, 3.5), facecolor='#1a1a2e')
+    ax.set_facecolor('#16213e')
+    
+    x = np.arange(len(labels))
+    bars = ax.bar(x, nilai, color=colors, width=0.5,
+                  edgecolor=[c + 'cc' for c in colors], linewidth=1.2, zorder=3)
+    
+    # Label atas bar
+    for bar, v in zip(bars, nilai):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.08,
+                f'{v}/5', ha='center', va='bottom', color='#e2e8f0',
+                fontsize=10, fontweight='bold')
+    
+    # Garis target ideal
+    ax.axhline(y=4, color='#48bb78', linewidth=1.8, linestyle='--', alpha=0.7, zorder=4)
+    ax.text(len(labels) - 0.4, 4.1, 'Target Ideal', color='#48bb78',
+            fontsize=8, va='bottom', ha='right')
+    
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, color='#e2e8f0', fontsize=9.5)
+    ax.set_ylabel('Level (1-5)', color='#a0aec0', fontsize=9)
+    ax.set_ylim(0, 6.2)
+    ax.tick_params(axis='y', colors='#a0aec0')
+    ax.grid(axis='y', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax.spines[['top','right']].set_visible(False)
+    ax.spines['left'].set_color('rgba(255,255,255,0.2)')
+    ax.spines['bottom'].set_color('rgba(255,255,255,0.2)')
+    ax.set_title('Level Kebiasaan Belajar', color='#e2e8f0',
+                 fontsize=11, fontweight='bold', pad=10)
+    plt.tight_layout()
     return fig
 
 
@@ -1596,21 +1615,17 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.plotly_chart(buat_gauge_chart(data['peluang']*100, "🎯 Peluang Lolos"), 
-                           use_container_width=True, key="gauge1")
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;margin-top:-15px;'>{data['peluang_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(buat_gauge_html(data['peluang']*100, "🎯 Peluang Lolos"), unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['peluang_kategori']}</p>", unsafe_allow_html=True)
         with col2:
-            st.plotly_chart(buat_gauge_chart(data['stabilitas'], "🧠 Stabilitas Mental"),
-                           use_container_width=True, key="gauge2")
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;margin-top:-15px;'>{data['stabilitas_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(buat_gauge_html(data['stabilitas'], "🧠 Stabilitas Mental"), unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['stabilitas_kategori']}</p>", unsafe_allow_html=True)
         with col3:
-            st.plotly_chart(buat_gauge_chart(data['konsistensi'], "📚 Konsistensi Belajar"),
-                           use_container_width=True, key="gauge3")
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;margin-top:-15px;'>{data['konsistensi_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(buat_gauge_html(data['konsistensi'], "📚 Konsistensi Belajar"), unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['konsistensi_kategori']}</p>", unsafe_allow_html=True)
         with col4:
-            st.plotly_chart(buat_gauge_chart(data['kebiasaan'], "⭐ Kebiasaan Belajar"),
-                           use_container_width=True, key="gauge4")
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;margin-top:-15px;'>{data['kebiasaan_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(buat_gauge_html(data['kebiasaan'], "⭐ Kebiasaan Belajar"), unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['kebiasaan_kategori']}</p>", unsafe_allow_html=True)
         
         st.divider()
         
@@ -1662,11 +1677,11 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         col_r, col_b = st.columns(2)
         with col_r:
             skor_subtes = {k: data[k] for k in SUBTES_LABELS.keys()}
-            st.plotly_chart(buat_radar_chart(skor_subtes, bobot, data['jurusan']),
-                           use_container_width=True, key="radar1")
+            st.pyplot(buat_radar_chart(skor_subtes, bobot, data['jurusan']), use_container_width=True)
+            plt.close()
         with col_b:
-            st.plotly_chart(buat_bar_kebiasaan(data),
-                           use_container_width=True, key="bar_keb")
+            st.pyplot(buat_bar_kebiasaan(data), use_container_width=True)
+            plt.close()
     
     # ========================
     # TAB 2: PELUANG KAMPUS
@@ -1710,8 +1725,8 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         
         # BAR CHART KAMPUS
         st.markdown("### 📊 Posisi Skor vs Semua PTN")
-        st.plotly_chart(buat_bar_peluang_kampus(data['akademik']),
-                       use_container_width=True, key="bar_kampus")
+        st.pyplot(buat_bar_peluang_kampus(data['akademik']), use_container_width=True)
+        plt.close()
         
         # TABEL PERBANDINGAN
         st.markdown("### 📋 Tabel Perbandingan Klaster")
@@ -1821,16 +1836,16 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Radar chart
-        st.plotly_chart(buat_radar_chart(skor_subtes, bobot, data['jurusan']),
-                       use_container_width=True, key="radar_tab3")
+        st.pyplot(buat_radar_chart(skor_subtes, bobot, data['jurusan']), use_container_width=True)
+        plt.close()
         
         # Bar + bobot overlay
-        st.plotly_chart(buat_bar_skor_subtes(skor_subtes, bobot),
-                       use_container_width=True, key="bar_subtes")
+        st.pyplot(buat_bar_skor_subtes(skor_subtes, bobot), use_container_width=True)
+        plt.close()
         
         # Pipeline
-        st.plotly_chart(buat_pipeline_subtes(skor_subtes, bobot),
-                       use_container_width=True, key="pipeline")
+        st.pyplot(buat_pipeline_subtes(skor_subtes, bobot), use_container_width=True)
+        plt.close()
         
         # Tabel detail
         st.markdown("#### 📊 Tabel Detail Subtes")
@@ -1879,10 +1894,8 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
             st.metric("Distraksi", f"{data['distraksi']}/5")
         
         with col2:
-            st.plotly_chart(buat_gauge_chart(data['stabilitas'], "🧠 Stabilitas Mental"),
-                           use_container_width=True, key="gauge_stab")
-            st.plotly_chart(buat_gauge_chart(data['konsistensi'], "📚 Konsistensi Belajar"),
-                           use_container_width=True, key="gauge_kons")
+            st.markdown(buat_gauge_html(data['stabilitas'], "🧠 Stabilitas Mental"), unsafe_allow_html=True)
+            st.markdown(buat_gauge_html(data['konsistensi'], "📚 Konsistensi Belajar"), unsafe_allow_html=True)
     
     # ========================
     # TAB 4: STRATEGI
