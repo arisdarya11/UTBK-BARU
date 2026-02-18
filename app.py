@@ -40,260 +40,274 @@ st.markdown("""
 <style>
     /* Import Font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    
-    /* Global */
+
+    /* ── GLOBAL ─────────────────────────────── */
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
+        color: #1a2744 !important;
     }
-    
-    /* Hide streamlit default elements */
+
+    /* Hide streamlit chrome */
     #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    /* Main background */
+    footer    {visibility: hidden;}
+
+    /* ── MAIN BACKGROUND: biru muda soft ───── */
     .stApp {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        background: linear-gradient(160deg, #dbeeff 0%, #c8e6fd 40%, #b8d9f8 100%);
         min-height: 100vh;
     }
-    
-    /* Sidebar */
+
+    /* Semua teks default → biru tua */
+    .stApp, .stApp * {
+        color: #1a2744;
+    }
+
+    /* ── SIDEBAR ─────────────────────────────── */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        border-right: 1px solid rgba(99, 179, 237, 0.2);
+        background: linear-gradient(180deg, #1e3a6e 0%, #1a3060 50%, #152654 100%);
+        border-right: 2px solid rgba(99,179,237,0.35);
     }
     [data-testid="stSidebar"] * {
-        color: #e2e8f0 !important;
+        color: #e8f4fd !important;
     }
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stSlider label,
-    [data-testid="stSidebar"] .stTextInput label {
+    [data-testid="stSidebar"] label {
         color: #90cdf4 !important;
-        font-weight: 500;
+        font-weight: 600;
     }
-    
-    /* Cards */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] p {
+        color: #bee3f8 !important;
+    }
+
+    /* ── HEADINGS ─────────────────────────── */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1a3060 !important;
+        font-weight: 800;
+    }
+    /* Markdown paragraphs */
+    .stMarkdown p, .stMarkdown li {
+        color: #1e3a5f !important;
+        font-size: 0.95rem;
+        line-height: 1.7;
+    }
+
+    /* ── CARDS ────────────────────────────── */
     .metric-card {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255,255,255,0.75);
         backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(30,90,160,0.15);
         border-radius: 16px;
         padding: 20px;
         margin: 8px 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 20px rgba(30,90,160,0.08);
+        color: #1a2744 !important;
     }
-    
+
     .hero-card {
-        background: linear-gradient(135deg, rgba(99, 179, 237, 0.15), rgba(154, 117, 234, 0.15));
-        border: 1px solid rgba(99, 179, 237, 0.3);
+        background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,179,237,0.18));
+        border: 1.5px solid rgba(59,130,246,0.3);
         border-radius: 20px;
         padding: 30px;
         margin: 16px 0;
         text-align: center;
     }
-    
-    .score-display {
-        font-size: 3.5rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #63b3ed, #9f7aea);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        line-height: 1.2;
-    }
-    
-    .badge-green {
-        background: linear-gradient(135deg, #38a169, #48bb78);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-    .badge-orange {
-        background: linear-gradient(135deg, #dd6b20, #ed8936);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-    .badge-red {
-        background: linear-gradient(135deg, #c53030, #e53e3e);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-    
-    /* Step indicators */
+
+    /* ── BADGES ───────────────────────────── */
+    .badge-green  { background: linear-gradient(135deg,#22863a,#34d058); color:#fff; padding:4px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; display:inline-block; }
+    .badge-orange { background: linear-gradient(135deg,#c05621,#ed8936); color:#fff; padding:4px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; display:inline-block; }
+    .badge-red    { background: linear-gradient(135deg,#9b2335,#e53e3e); color:#fff; padding:4px 12px; border-radius:20px; font-size:0.75rem; font-weight:700; display:inline-block; }
+
+    /* ── STEP INDICATORS ─────────────────── */
     .step-indicator {
-        background: rgba(99, 179, 237, 0.1);
-        border: 2px solid rgba(99, 179, 237, 0.4);
+        background: rgba(59,130,246,0.12);
+        border: 2px solid rgba(59,130,246,0.4);
         border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        color: #63b3ed;
-        font-size: 1.1rem;
+        width: 40px; height: 40px;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; color: #1e40af; font-size: 1.1rem;
     }
-    
     .step-active {
-        background: linear-gradient(135deg, #4299e1, #9f7aea);
-        border: none;
-        color: white;
+        background: linear-gradient(135deg,#2563eb,#3b82f6);
+        border: none; color: white;
     }
-    
-    /* Progress bar custom */
-    .progress-bar-bg {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        height: 12px;
-        overflow: hidden;
-    }
-    .progress-bar-fill {
-        height: 100%;
-        border-radius: 10px;
-        background: linear-gradient(90deg, #4299e1, #9f7aea);
-        transition: width 0.5s ease;
-    }
-    
-    /* Section headers */
+
+    /* ── PROGRESS BAR ────────────────────── */
+    .progress-bar-bg  { background: rgba(30,90,160,0.12); border-radius:10px; height:12px; overflow:hidden; }
+    .progress-bar-fill{ height:100%; border-radius:10px; background:linear-gradient(90deg,#2563eb,#38bdf8); transition:width .5s; }
+
+    /* ── SECTION HEADER ──────────────────── */
     .section-header {
-        color: #e2e8f0;
-        font-size: 1.4rem;
-        font-weight: 700;
-        margin-bottom: 16px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid rgba(99, 179, 237, 0.3);
+        color: #1e3a6e !important;
+        font-size: 1.4rem; font-weight: 800;
+        margin-bottom: 16px; padding-bottom: 8px;
+        border-bottom: 2.5px solid #2563eb;
     }
-    
-    /* Welcome page */
+
+    /* ── WELCOME HERO ────────────────────── */
     .welcome-hero {
-        background: linear-gradient(135deg, rgba(66, 153, 225, 0.2), rgba(159, 122, 234, 0.2));
-        border: 1px solid rgba(99, 179, 237, 0.3);
-        border-radius: 24px;
-        padding: 40px;
-        text-align: center;
-        margin-bottom: 24px;
+        background: linear-gradient(135deg, rgba(37,99,235,0.10), rgba(56,189,248,0.15));
+        border: 1.5px solid rgba(37,99,235,0.25);
+        border-radius: 24px; padding: 40px; text-align: center; margin-bottom: 24px;
     }
-    
+
+    /* ── FEATURE CARDS ───────────────────── */
     .feature-card {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 20px;
-        height: 100%;
-        transition: transform 0.2s, border-color 0.2s;
+        background: rgba(255,255,255,0.80);
+        border: 1.5px solid rgba(37,99,235,0.15);
+        border-radius: 16px; padding: 20px; height: 100%;
+        transition: transform .2s, border-color .2s, box-shadow .2s;
+        box-shadow: 0 2px 12px rgba(37,99,235,0.07);
     }
     .feature-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(99, 179, 237, 0.4);
+        border-color: rgba(37,99,235,0.4);
+        box-shadow: 0 8px 24px rgba(37,99,235,0.12);
     }
-    
-    /* Metric value display */
-    .big-number {
-        font-size: 2.5rem;
-        font-weight: 800;
-        line-height: 1;
-    }
-    
-    /* Tabs styling */
+    .feature-card p { color: #1e3a5f !important; }
+
+    /* ── TABS ────────────────────────────── */
     .stTabs [data-baseweb="tab-list"] {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        padding: 4px;
-        gap: 4px;
+        background: rgba(255,255,255,0.60);
+        border-radius: 12px; padding: 4px; gap: 4px;
+        border: 1px solid rgba(37,99,235,0.15);
     }
     .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        font-weight: 600;
-        color: #a0aec0 !important;
+        border-radius: 8px; font-weight: 600;
+        color: #1e40af !important;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #4299e1, #9f7aea) !important;
+        background: linear-gradient(135deg,#2563eb,#38bdf8) !important;
         color: white !important;
     }
-    
-    /* Bobot table */
-    .bobot-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 12px;
-        margin: 4px 0;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        border-left: 3px solid #4299e1;
-    }
-    
-    /* Info boxes */
+
+    /* ── INFO BOXES ──────────────────────── */
     .info-box {
-        background: rgba(66, 153, 225, 0.1);
-        border: 1px solid rgba(66, 153, 225, 0.3);
-        border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
+        background: rgba(219,234,254,0.80);
+        border: 1.5px solid rgba(37,99,235,0.25);
+        border-radius: 12px; padding: 16px; margin: 8px 0;
+        color: #1e3a6e !important;
     }
+    .info-box * { color: #1e3a6e !important; }
+
     .success-box {
-        background: rgba(56, 161, 105, 0.1);
-        border: 1px solid rgba(56, 161, 105, 0.3);
-        border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
+        background: rgba(209,250,229,0.80);
+        border: 1.5px solid rgba(16,185,129,0.35);
+        border-radius: 12px; padding: 16px; margin: 8px 0;
+        color: #064e3b !important;
     }
     .warning-box {
-        background: rgba(221, 107, 32, 0.1);
-        border: 1px solid rgba(221, 107, 32, 0.3);
-        border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
+        background: rgba(255,237,213,0.85);
+        border: 1.5px solid rgba(234,88,12,0.30);
+        border-radius: 12px; padding: 16px; margin: 8px 0;
+        color: #7c2d12 !important;
     }
     .danger-box {
-        background: rgba(197, 48, 48, 0.1);
-        border: 1px solid rgba(197, 48, 48, 0.3);
-        border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
+        background: rgba(254,226,226,0.85);
+        border: 1.5px solid rgba(220,38,38,0.30);
+        border-radius: 12px; padding: 16px; margin: 8px 0;
+        color: #7f1d1d !important;
     }
-    
-    /* Button styling */
+
+    /* ── BOBOT ITEM ──────────────────────── */
+    .bobot-item {
+        display:flex; justify-content:space-between; align-items:center;
+        padding:8px 12px; margin:4px 0;
+        background: rgba(219,234,254,0.70);
+        border-radius: 8px; border-left: 3px solid #2563eb;
+        color: #1e3a6e !important;
+    }
+
+    /* ── BUTTONS ─────────────────────────── */
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #4299e1, #9f7aea) !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
+        background: linear-gradient(135deg,#2563eb,#38bdf8) !important;
+        border: none !important; border-radius: 12px !important;
+        color: white !important; font-weight: 700 !important;
         letter-spacing: 0.5px;
-        box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4) !important;
-        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(37,99,235,0.35) !important;
+        transition: all .3s ease !important;
     }
     .stButton > button[kind="primary"]:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(66, 153, 225, 0.6) !important;
+        box-shadow: 0 8px 25px rgba(37,99,235,0.50) !important;
     }
-    
-    
-    /* Metric styling */
+    .stButton > button {
+        color: #1e3a6e !important;
+        border-color: rgba(37,99,235,0.3) !important;
+        background: rgba(255,255,255,0.8) !important;
+    }
+
+    /* ── METRICS ─────────────────────────── */
     [data-testid="metric-container"] {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 12px;
+        background: rgba(255,255,255,0.80) !important;
+        border: 1.5px solid rgba(37,99,235,0.15) !important;
+        border-radius: 12px; padding: 12px;
+        box-shadow: 0 2px 8px rgba(37,99,235,0.07);
     }
     [data-testid="metric-container"] label {
-        color: #a0aec0 !important;
-        font-size: 0.8rem !important;
+        color: #374da0 !important;
+        font-size: 0.8rem !important; font-weight: 600 !important;
     }
     [data-testid="metric-container"] [data-testid="metric-value"] {
-        color: #e2e8f0 !important;
-        font-weight: 700 !important;
+        color: #1a2744 !important;
+        font-weight: 800 !important; font-size: 1.5rem !important;
     }
+    [data-testid="metric-container"] [data-testid="metric-delta"] {
+        color: #1e6b3c !important; font-weight: 600 !important;
+    }
+
+    /* ── STREAMLIT ALERTS / INFO ─────────── */
+    .stAlert { border-radius: 12px !important; }
+    div[data-testid="stInfo"]    { background: rgba(219,234,254,0.85) !important; color:#1e3a6e !important; border-color:#3b82f6 !important; }
+    div[data-testid="stSuccess"] { background: rgba(209,250,229,0.85) !important; color:#064e3b !important; }
+    div[data-testid="stWarning"] { background: rgba(255,237,213,0.90) !important; color:#7c2d12 !important; }
+    div[data-testid="stError"]   { background: rgba(254,226,226,0.90) !important; color:#7f1d1d !important; }
+
+    /* ── DATAFRAME / TABLE ───────────────── */
+    .stDataFrame { background: rgba(255,255,255,0.85) !important; border-radius:12px; }
+    .stDataFrame th { background: #1e3a6e !important; color: white !important; }
+    .stDataFrame td { color: #1a2744 !important; }
+
+    /* ── EXPANDER ────────────────────────── */
+    details { 
+        background: rgba(255,255,255,0.70) !important;
+        border: 1.5px solid rgba(37,99,235,0.15) !important;
+        border-radius: 12px !important;
+    }
+    details summary { color: #1e3a6e !important; font-weight: 600 !important; }
+
+    /* ── SELECT BOX / SLIDER labels ──────── */
+    .stSelectbox label, .stSlider label, .stTextInput label, .stRadio label {
+        color: #1e3a6e !important; font-weight: 600 !important;
+    }
+    /* selectbox text inside box */
+    .stSelectbox div[data-baseweb="select"] > div {
+        background: rgba(255,255,255,0.90) !important;
+        color: #1a2744 !important;
+        border-color: rgba(37,99,235,0.25) !important;
+    }
+    /* text input */
+    .stTextInput > div > div > input {
+        background: rgba(255,255,255,0.90) !important;
+        color: #1a2744 !important;
+        border-color: rgba(37,99,235,0.25) !important;
+    }
+    /* slider track */
+    .stSlider [data-baseweb="slider"] div[role="slider"] {
+        background: #2563eb !important;
+    }
+
+    /* ── CAPTION ─────────────────────────── */
+    .stCaption, [data-testid="stCaptionContainer"] {
+        color: #374da0 !important;
+    }
+
+    /* ── DIVIDER ─────────────────────────── */
+    hr { border-color: rgba(37,99,235,0.2) !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -712,14 +726,14 @@ def prediksi_lgbm(model, input_data):
 
 def set_dark_style():
     plt.rcParams.update({
-        'figure.facecolor': '#1a1a2e',
-        'axes.facecolor': '#16213e',
-        'axes.edgecolor': 'rgba(255,255,255,0.2)',
-        'axes.labelcolor': '#a0aec0',
-        'text.color': '#e2e8f0',
-        'xtick.color': '#a0aec0',
-        'ytick.color': '#a0aec0',
-        'grid.color': 'rgba(255,255,255,0.08)',
+        'figure.facecolor': '#dbeeff',
+        'axes.facecolor': '#eaf4ff',
+        'axes.edgecolor': 'rgba(37,99,235,0.3)',
+        'axes.labelcolor': '#2d5a9e',
+        'text.color': '#1a2f6e',
+        'xtick.color': '#2d5a9e',
+        'ytick.color': '#2d5a9e',
+        'grid.color': 'rgba(37,99,235,0.12)',
         'grid.linestyle': '--',
         'font.family': 'DejaVu Sans',
     })
@@ -742,9 +756,9 @@ def buat_gauge_html(nilai: float, judul: str, max_val: float = 100) -> str:
     display_val = f"{nilai:.0f}"
 
     return f"""
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+    <div style="background:rgba(255,255,255,0.85);border:1.5px solid rgba(37,99,235,0.20);
                 border-radius:16px;padding:16px 12px;text-align:center;">
-        <p style="color:#a0aec0;font-size:0.78rem;font-weight:600;text-transform:uppercase;
+        <p style="color:#2d5a9e;font-size:0.78rem;font-weight:600;text-transform:uppercase;
                   letter-spacing:0.8px;margin:0 0 10px;">{judul}</p>
         <div style="position:relative;width:120px;height:65px;margin:0 auto 8px;">
             <!-- Track background -->
@@ -765,8 +779,8 @@ def buat_gauge_html(nilai: float, judul: str, max_val: float = 100) -> str:
             </div>
         </div>
         <div style="display:flex;justify-content:space-between;margin:0 8px;">
-            <span style="color:#718096;font-size:0.65rem;">0</span>
-            <span style="color:#718096;font-size:0.65rem;">{max_val:.0f}</span>
+            <span style="color:#3a6fa8;font-size:0.65rem;">0</span>
+            <span style="color:#3a6fa8;font-size:0.65rem;">{max_val:.0f}</span>
         </div>
     </div>"""
 
@@ -798,35 +812,35 @@ def buat_radar_chart(skor_subtes: Dict, bobot: Dict, jurusan: str):
     bobot_plot = bobot_scaled + [bobot_scaled[0]]
     
     fig, ax = plt.subplots(figsize=(6, 5), subplot_kw=dict(polar=True),
-                            facecolor='#1a1a2e')
-    ax.set_facecolor('#16213e')
+                            facecolor='#dbeeff')
+    ax.set_facecolor('#eaf4ff')
     
     # Grid rings
     ax.set_ylim(0, SKOR_MAX_UTBK)
     ax.set_yticks([200, 400, 600, 800, 1000])
-    ax.set_yticklabels(['200', '400', '600', '800', '1000'], color='#4a5568', fontsize=7)
+    ax.set_yticklabels(['200', '400', '600', '800', '1000'], color='#1e3a6e', fontsize=7)
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(labels, color='#e2e8f0', fontsize=9.5, fontweight='bold')
-    ax.grid(color='rgba(255,255,255,0.08)', linewidth=0.8)
+    ax.set_xticklabels(labels, color='#1a2f6e', fontsize=9.5, fontweight='bold')
+    ax.grid(color='rgba(37,99,235,0.12)', linewidth=0.8)
     ax.spines['polar'].set_color('rgba(255,255,255,0.15)')
     
     # Bobot target
-    ax.fill(angles, bobot_plot, alpha=0.15, color='#9f7aea')
-    ax.plot(angles, bobot_plot, color='#9f7aea', linewidth=2, linestyle='--',
+    ax.fill(angles, bobot_plot, alpha=0.15, color='#6d28d9')
+    ax.plot(angles, bobot_plot, color='#6d28d9', linewidth=2, linestyle='--',
             label=f'Bobot ({jurusan})')
-    ax.scatter(angles[:-1], bobot_scaled, color='#9f7aea', s=40, zorder=5)
+    ax.scatter(angles[:-1], bobot_scaled, color='#6d28d9', s=40, zorder=5)
     
     # Skor aktual
     ax.fill(angles, nilai_plot, alpha=0.25, color='#4299e1')
     ax.plot(angles, nilai_plot, color='#4299e1', linewidth=2.5, label='Skor Kamu')
-    ax.scatter(angles[:-1], nilai, color='#63b3ed', s=60, zorder=5,
+    ax.scatter(angles[:-1], nilai, color='#1a56db', s=60, zorder=5,
                edgecolors='white', linewidths=0.8)
     
     ax.legend(loc='upper right', bbox_to_anchor=(1.35, 1.15),
-              facecolor='#1a1a2e', edgecolor='rgba(255,255,255,0.2)',
-              labelcolor='#e2e8f0', fontsize=8.5)
+              facecolor='#dbeeff', edgecolor='rgba(37,99,235,0.3)',
+              labelcolor='#1a2f6e', fontsize=8.5)
     
-    ax.set_title(f'Profil TPS vs Bobot Jurusan', color='#e2e8f0',
+    ax.set_title(f'Profil TPS vs Bobot Jurusan', color='#1a2f6e',
                  fontsize=11, fontweight='bold', pad=18)
     
     plt.tight_layout()
@@ -841,26 +855,26 @@ def buat_bar_skor_subtes(skor_subtes: Dict, bobot: Dict):
     bobot_vals = [bobot[k] * 100 for k in keys]
     
     x = np.arange(len(keys))
-    fig, ax1 = plt.subplots(figsize=(9, 4.5), facecolor='#1a1a2e')
-    ax1.set_facecolor('#16213e')
+    fig, ax1 = plt.subplots(figsize=(9, 4.5), facecolor='#dbeeff')
+    ax1.set_facecolor('#eaf4ff')
     
     # Bar skor dengan gradient warna
     bar_colors = [plt.cm.Blues(0.4 + (v / SKOR_MAX_UTBK) * 0.5) for v in nilai]
     bars = ax1.bar(x, nilai, color=bar_colors, width=0.5,
-                   edgecolor='#63b3ed', linewidth=0.8, zorder=3)
+                   edgecolor='#1a56db', linewidth=0.8, zorder=3)
     
     # Label skor di atas bar
     for bar, v in zip(bars, nilai):
         ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 12,
-                 f'{v}', ha='center', va='bottom', color='#e2e8f0',
+                 f'{v}', ha='center', va='bottom', color='#1a2f6e',
                  fontsize=9.5, fontweight='bold')
     
     ax1.set_xticks(x)
-    ax1.set_xticklabels(keys, color='#e2e8f0', fontsize=10, fontweight='bold')
-    ax1.set_ylabel('Skor TPS (0-1000)', color='#63b3ed', fontsize=9)
+    ax1.set_xticklabels(keys, color='#1a2f6e', fontsize=10, fontweight='bold')
+    ax1.set_ylabel('Skor TPS (0-1000)', color='#1a56db', fontsize=9)
     ax1.set_ylim(0, SKOR_MAX_UTBK + 150)
     ax1.tick_params(axis='y', colors='#63b3ed')
-    ax1.grid(axis='y', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax1.grid(axis='y', color='rgba(37,99,235,0.12)', linewidth=0.8, zorder=0)
     ax1.spines[['top','right']].set_visible(False)
     ax1.spines['left'].set_color('#63b3ed')
     ax1.spines['bottom'].set_color('rgba(255,255,255,0.2)')
@@ -887,10 +901,10 @@ def buat_bar_skor_subtes(skor_subtes: Dict, bobot: Dict):
                marker='D', markersize=6, label='Bobot Jurusan (%)'),
     ]
     ax1.legend(handles=leg_elements, loc='upper right',
-               facecolor='#1a1a2e', edgecolor='rgba(255,255,255,0.2)',
-               labelcolor='#e2e8f0', fontsize=8.5)
+               facecolor='#dbeeff', edgecolor='rgba(37,99,235,0.3)',
+               labelcolor='#1a2f6e', fontsize=8.5)
     
-    ax1.set_title('Skor Subtes & Bobot Jurusan', color='#e2e8f0',
+    ax1.set_title('Skor Subtes & Bobot Jurusan', color='#1a2f6e',
                   fontsize=11, fontweight='bold', pad=12)
     plt.tight_layout()
     return fig
@@ -916,8 +930,8 @@ def buat_bar_peluang_kampus(skor_akademik: float):
     n = len(kampus_list)
     x = np.arange(n)
     
-    fig, ax = plt.subplots(figsize=(12, 5), facecolor='#1a1a2e')
-    ax.set_facecolor('#16213e')
+    fig, ax = plt.subplots(figsize=(12, 5), facecolor='#dbeeff')
+    ax.set_facecolor('#eaf4ff')
     
     # Bar zona aman (dari min ke max)
     ranges = [mx - mn for mx, mn in zip(smax_list, smin_list)]
@@ -928,7 +942,7 @@ def buat_bar_peluang_kampus(skor_akademik: float):
     for bar, smin, smax, col in zip(bars, smin_list, smax_list, color_list):
         mid = smin + (smax - smin) / 2
         ax.text(bar.get_x() + bar.get_width()/2, mid, f'{smin}–{smax}',
-                ha='center', va='center', color='white', fontsize=7, fontweight='bold')
+                ha='center', va='center', color='#1e2a5e', fontsize=7, fontweight='bold')
     
     # Garis skor kamu
     ax.axhline(y=skor_akademik, color='#4299e1', linewidth=2.5, linestyle='-', zorder=5)
@@ -936,11 +950,11 @@ def buat_bar_peluang_kampus(skor_akademik: float):
             color='#4299e1', fontsize=10, fontweight='bold', va='bottom')
     
     ax.set_xticks(x)
-    ax.set_xticklabels(kampus_list, rotation=45, ha='right', color='#e2e8f0', fontsize=8)
-    ax.set_ylabel('Skor UTBK', color='#a0aec0', fontsize=9)
+    ax.set_xticklabels(kampus_list, rotation=45, ha='right', color='#1a2f6e', fontsize=8)
+    ax.set_ylabel('Skor UTBK', color='#2d5a9e', fontsize=9)
     ax.set_ylim(400, 1050)
     ax.tick_params(axis='y', colors='#a0aec0')
-    ax.grid(axis='y', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax.grid(axis='y', color='rgba(37,99,235,0.12)', linewidth=0.8, zorder=0)
     ax.spines[['top','right']].set_visible(False)
     ax.spines['left'].set_color('rgba(255,255,255,0.2)')
     ax.spines['bottom'].set_color('rgba(255,255,255,0.2)')
@@ -953,10 +967,10 @@ def buat_bar_peluang_kampus(skor_akademik: float):
         mpatches.Patch(facecolor='#48bb78', alpha=0.7, label='Klaster 4 (Regional)'),
     ]
     ax.legend(handles=legend_patches, loc='upper left',
-              facecolor='#1a1a2e', edgecolor='rgba(255,255,255,0.2)',
-              labelcolor='#e2e8f0', fontsize=8)
+              facecolor='#dbeeff', edgecolor='rgba(37,99,235,0.3)',
+              labelcolor='#1a2f6e', fontsize=8)
     
-    ax.set_title('Posisi Skor vs Zona Aman Semua PTN', color='#e2e8f0',
+    ax.set_title('Posisi Skor vs Zona Aman Semua PTN', color='#1a2f6e',
                  fontsize=11, fontweight='bold', pad=12)
     plt.tight_layout()
     return fig
@@ -974,32 +988,32 @@ def buat_pipeline_subtes(skor_subtes: Dict, bobot: Dict):
     sorted_data = sorted(zip(labels, kontribusi, bobot_pct), key=lambda x: x[1], reverse=True)
     labels_s, kontrib_s, bobot_s = zip(*sorted_data)
     
-    fig, ax = plt.subplots(figsize=(8, 4), facecolor='#1a1a2e')
-    ax.set_facecolor('#16213e')
+    fig, ax = plt.subplots(figsize=(8, 4), facecolor='#dbeeff')
+    ax.set_facecolor('#eaf4ff')
     
     y = np.arange(len(labels_s))
     max_k = max(kontrib_s)
     bar_colors = [plt.cm.Blues(0.35 + (k / max_k) * 0.55) for k in kontrib_s]
     
     bars = ax.barh(y, kontrib_s, color=bar_colors, height=0.6,
-                   edgecolor='#63b3ed', linewidth=0.8, zorder=3)
+                   edgecolor='#1a56db', linewidth=0.8, zorder=3)
     
     # Label di kanan bar
     for bar, kv, bv in zip(bars, kontrib_s, bobot_s):
         ax.text(bar.get_width() + max_k * 0.01, bar.get_y() + bar.get_height()/2,
                 f'{kv:.0f} pts  ({bv:.0f}% bobot)',
-                va='center', ha='left', color='#e2e8f0', fontsize=8.5)
+                va='center', ha='left', color='#1a2f6e', fontsize=8.5)
     
     ax.set_yticks(y)
-    ax.set_yticklabels(labels_s, color='#e2e8f0', fontsize=9)
-    ax.set_xlabel('Kontribusi Tertimbang (Skor × Bobot)', color='#a0aec0', fontsize=9)
+    ax.set_yticklabels(labels_s, color='#1a2f6e', fontsize=9)
+    ax.set_xlabel('Kontribusi Tertimbang (Skor × Bobot)', color='#2d5a9e', fontsize=9)
     ax.set_xlim(0, max_k * 1.55)
     ax.tick_params(axis='x', colors='#a0aec0')
-    ax.grid(axis='x', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax.grid(axis='x', color='rgba(37,99,235,0.12)', linewidth=0.8, zorder=0)
     ax.spines[['top','right']].set_visible(False)
     ax.spines['left'].set_color('rgba(255,255,255,0.15)')
     ax.spines['bottom'].set_color('rgba(255,255,255,0.15)')
-    ax.set_title('Pipeline: Kontribusi Tertimbang Setiap Subtes', color='#e2e8f0',
+    ax.set_title('Pipeline: Kontribusi Tertimbang Setiap Subtes', color='#1a2f6e',
                  fontsize=11, fontweight='bold', pad=12)
     plt.tight_layout()
     return fig
@@ -1014,8 +1028,8 @@ def buat_bar_kebiasaan(data: Dict):
     
     colors = ['#48bb78' if v >= 4 else '#f6e05e' if v >= 3 else '#fc8181' for v in nilai]
     
-    fig, ax = plt.subplots(figsize=(7, 3.5), facecolor='#1a1a2e')
-    ax.set_facecolor('#16213e')
+    fig, ax = plt.subplots(figsize=(7, 3.5), facecolor='#dbeeff')
+    ax.set_facecolor('#eaf4ff')
     
     x = np.arange(len(labels))
     bars = ax.bar(x, nilai, color=colors, width=0.5,
@@ -1024,7 +1038,7 @@ def buat_bar_kebiasaan(data: Dict):
     # Label atas bar
     for bar, v in zip(bars, nilai):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.08,
-                f'{v}/5', ha='center', va='bottom', color='#e2e8f0',
+                f'{v}/5', ha='center', va='bottom', color='#1a2f6e',
                 fontsize=10, fontweight='bold')
     
     # Garis target ideal
@@ -1033,15 +1047,15 @@ def buat_bar_kebiasaan(data: Dict):
             fontsize=8, va='bottom', ha='right')
     
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, color='#e2e8f0', fontsize=9.5)
-    ax.set_ylabel('Level (1-5)', color='#a0aec0', fontsize=9)
+    ax.set_xticklabels(labels, color='#1a2f6e', fontsize=9.5)
+    ax.set_ylabel('Level (1-5)', color='#2d5a9e', fontsize=9)
     ax.set_ylim(0, 6.2)
     ax.tick_params(axis='y', colors='#a0aec0')
-    ax.grid(axis='y', color='rgba(255,255,255,0.06)', linewidth=0.8, zorder=0)
+    ax.grid(axis='y', color='rgba(37,99,235,0.12)', linewidth=0.8, zorder=0)
     ax.spines[['top','right']].set_visible(False)
     ax.spines['left'].set_color('rgba(255,255,255,0.2)')
     ax.spines['bottom'].set_color('rgba(255,255,255,0.2)')
-    ax.set_title('Level Kebiasaan Belajar', color='#e2e8f0',
+    ax.set_title('Level Kebiasaan Belajar', color='#1a2f6e',
                  fontsize=11, fontweight='bold', pad=10)
     plt.tight_layout()
     return fig
@@ -1181,8 +1195,8 @@ def render_survey_page():
     # Header
     st.markdown("""
     <div style="text-align:center; padding: 20px 0;">
-        <h1 style="color:#e2e8f0; font-size:2.2rem; font-weight:800;">🎯 AI UTBK Dashboard</h1>
-        <p style="color:#a0aec0; font-size:1rem;">Isi survey untuk mendapatkan analisis kesiapan UTBK kamu</p>
+        <h1 style="color:#1a2f6e; font-size:2.2rem; font-weight:800;">🎯 AI UTBK Dashboard</h1>
+        <p style="color:#2d5a9e; font-size:1rem;">Isi survey untuk mendapatkan analisis kesiapan UTBK kamu</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1201,19 +1215,19 @@ def render_survey_page():
             elif i == step:
                 st.markdown(f"""<div style="text-align:center;">
                     <div style="background:linear-gradient(135deg,#4299e1,#9f7aea);color:white;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto;font-weight:700;font-size:1rem;">{i}</div>
-                    <p style="color:#e2e8f0;font-size:0.8rem;margin-top:4px;font-weight:700;">{label}</p>
+                    <p style="color:#1a2f6e;font-size:0.8rem;margin-top:4px;font-weight:700;">{label}</p>
                 </div>""", unsafe_allow_html=True)
             else:
                 st.markdown(f"""<div style="text-align:center;">
-                    <div style="background:rgba(255,255,255,0.1);color:#a0aec0;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto;font-weight:700;font-size:1rem;">{i}</div>
-                    <p style="color:#718096;font-size:0.8rem;margin-top:4px;">{label}</p>
+                    <div style="background:rgba(255,255,255,0.80);color:#2d5a9e;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto;font-weight:700;font-size:1rem;">{i}</div>
+                    <p style="color:#3a6fa8;font-size:0.8rem;margin-top:4px;">{label}</p>
                 </div>""", unsafe_allow_html=True)
     
     # Progress bar
     pct = (step - 1) / 3 * 100
     st.markdown(f"""
     <div style="margin: 16px 0 24px;">
-        <div style="background:rgba(255,255,255,0.1);border-radius:10px;height:8px;overflow:hidden;">
+        <div style="background:rgba(255,255,255,0.80);border-radius:10px;height:8px;overflow:hidden;">
             <div style="background:linear-gradient(90deg,#4299e1,#9f7aea);width:{pct}%;height:8px;border-radius:10px;transition:width 0.5s;"></div>
         </div>
     </div>
@@ -1224,7 +1238,7 @@ def render_survey_page():
     # ===== STEP 1: PROFIL =====
     if step == 1:
         st.markdown("### 👤 Step 1: Profil Siswa")
-        st.markdown("<p style='color:#a0aec0;'>Masukkan data pribadi dan target kamu</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#2d5a9e;'>Masukkan data pribadi dan target kamu</p>", unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -1248,9 +1262,9 @@ def render_survey_page():
         with col1:
             st.markdown(f"""
             <div class="info-box">
-                <p style="color:#63b3ed;font-weight:600;margin-bottom:4px;">{klaster['warna']} {klaster['nama']}</p>
-                <p style="color:#a0aec0;font-size:0.85rem;margin:0;">{klaster['keterangan']}</p>
-                <p style="color:#e2e8f0;font-weight:700;margin-top:8px;font-size:1.1rem;">
+                <p style="color:#1a56db;font-weight:600;margin-bottom:4px;">{klaster['warna']} {klaster['nama']}</p>
+                <p style="color:#2d5a9e;font-size:0.85rem;margin:0;">{klaster['keterangan']}</p>
+                <p style="color:#1a2f6e;font-weight:700;margin-top:8px;font-size:1.1rem;">
                     Zona Aman: {klaster['skor_min']} – {klaster['skor_max']}
                 </p>
             </div>
@@ -1258,9 +1272,9 @@ def render_survey_page():
         with col2:
             st.markdown(f"""
             <div class="info-box">
-                <p style="color:#63b3ed;font-weight:600;margin-bottom:4px;">📚 {label_kel}</p>
-                <p style="color:#a0aec0;font-size:0.85rem;margin-bottom:6px;">Bobot subtes utama:</p>
-                {''.join([f'<span style="background:rgba(99,179,237,0.2);color:#e2e8f0;padding:2px 8px;border-radius:8px;font-size:0.8rem;margin:2px;display:inline-block;">{k}: {v*100:.0f}%</span>' for k,v in sorted(bobot_j.items(), key=lambda x:-x[1])[:3]])}
+                <p style="color:#1a56db;font-weight:600;margin-bottom:4px;">📚 {label_kel}</p>
+                <p style="color:#2d5a9e;font-size:0.85rem;margin-bottom:6px;">Bobot subtes utama:</p>
+                {''.join([f'<span style="background:rgba(219,234,254,0.85);color:#1a2f6e;padding:2px 8px;border-radius:8px;font-size:0.8rem;margin:2px;display:inline-block;">{k}: {v*100:.0f}%</span>' for k,v in sorted(bobot_j.items(), key=lambda x:-x[1])[:3]])}
             </div>
             """, unsafe_allow_html=True)
         
@@ -1275,7 +1289,7 @@ def render_survey_page():
     # ===== STEP 2: SKOR TPS =====
     elif step == 2:
         st.markdown("### 📊 Step 2: Skor TPS (Try Out / Prediksi)")
-        st.markdown(f"<p style='color:#a0aec0;'>Skor berdasarkan skala UTBK 2024 (0–{SKOR_MAX_UTBK})</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:#2d5a9e;'>Skor berdasarkan skala UTBK 2024 (0–{SKOR_MAX_UTBK})</p>", unsafe_allow_html=True)
         
         bobot_j, label_kel = get_bobot_jurusan(st.session_state.get('jurusan', DAFTAR_JURUSAN[0]))
         
@@ -1344,7 +1358,7 @@ def render_survey_page():
     # ===== STEP 3: PSIKOLOGI =====
     elif step == 3:
         st.markdown("### 🧠 Step 3: Kondisi Psikologi")
-        st.markdown("<p style='color:#a0aec0;'>Jawab dengan jujur — tidak ada jawaban benar/salah</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#2d5a9e;'>Jawab dengan jujur — tidak ada jawaban benar/salah</p>", unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -1358,8 +1372,8 @@ def render_survey_page():
             total_positif = (fokus + percaya_diri) / 10 * 100
             st.markdown(f"""
             <div style="margin-top:12px;">
-                <p style="color:#a0aec0;font-size:0.8rem;">Skor Positif: {total_positif:.0f}%</p>
-                <div style="background:rgba(255,255,255,0.1);border-radius:6px;height:8px;">
+                <p style="color:#2d5a9e;font-size:0.8rem;">Skor Positif: {total_positif:.0f}%</p>
+                <div style="background:rgba(255,255,255,0.80);border-radius:6px;height:8px;">
                     <div style="background:linear-gradient(90deg,#48bb78,#68d391);width:{total_positif}%;height:8px;border-radius:6px;"></div>
                 </div>
             </div>
@@ -1375,8 +1389,8 @@ def render_survey_page():
             total_negatif = (kecemasan + distraksi) / 10 * 100
             st.markdown(f"""
             <div style="margin-top:12px;">
-                <p style="color:#a0aec0;font-size:0.8rem;">Level Tantangan: {total_negatif:.0f}%</p>
-                <div style="background:rgba(255,255,255,0.1);border-radius:6px;height:8px;">
+                <p style="color:#2d5a9e;font-size:0.8rem;">Level Tantangan: {total_negatif:.0f}%</p>
+                <div style="background:rgba(255,255,255,0.80);border-radius:6px;height:8px;">
                     <div style="background:linear-gradient(90deg,#fc8181,#feb2b2);width:{total_negatif}%;height:8px;border-radius:6px;"></div>
                 </div>
             </div>
@@ -1387,7 +1401,7 @@ def render_survey_page():
         color = "#48bb78" if stab >= 65 else "#f6e05e" if stab >= 50 else "#fc8181"
         st.markdown(f"""
         <div class="info-box" style="margin-top:16px;">
-            <p style="color:#a0aec0;margin:0;font-size:0.85rem;">Preview Stabilitas Mental:</p>
+            <p style="color:#2d5a9e;margin:0;font-size:0.85rem;">Preview Stabilitas Mental:</p>
             <p style="color:{color};font-size:1.5rem;font-weight:800;margin:4px 0;">{stab:.0f}% — {stab_kat}</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1409,7 +1423,7 @@ def render_survey_page():
     # ===== STEP 4: KEBIASAAN =====
     elif step == 4:
         st.markdown("### 📚 Step 4: Kebiasaan Belajar")
-        st.markdown("<p style='color:#a0aec0;'>Ceritakan rutinitas belajar kamu saat ini</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#2d5a9e;'>Ceritakan rutinitas belajar kamu saat ini</p>", unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -1444,9 +1458,9 @@ def render_survey_page():
             color_keb = "#48bb78" if skor_keb >= 65 else "#f6e05e" if skor_keb >= 45 else "#fc8181"
             st.markdown(f"""
             <div class="info-box" style="margin-top:8px;">
-                <p style="color:#a0aec0;margin:0;font-size:0.85rem;">Preview Skor Kebiasaan:</p>
+                <p style="color:#2d5a9e;margin:0;font-size:0.85rem;">Preview Skor Kebiasaan:</p>
                 <p style="color:{color_keb};font-size:1.8rem;font-weight:800;margin:4px 0;">{emoji_keb} {skor_keb:.0f}/100</p>
-                <p style="color:#e2e8f0;font-size:0.85rem;margin:0;font-weight:600;">{kat_keb}</p>
+                <p style="color:#1a2f6e;font-size:0.85rem;margin:0;font-weight:600;">{kat_keb}</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -1568,8 +1582,8 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         salam = "Selamat pagi" if jam < 11 else "Selamat siang" if jam < 15 else "Selamat sore" if jam < 18 else "Selamat malam"
         st.markdown(f"""
         <div style="text-align:center;">
-            <h1 style="color:#e2e8f0;font-size:1.8rem;font-weight:800;margin:0;">🎯 AI UTBK Dashboard</h1>
-            <p style="color:#63b3ed;margin:0;">{salam}, <strong>{nama_display}</strong>! 👋</p>
+            <h1 style="color:#1a2f6e;font-size:1.8rem;font-weight:800;margin:0;">🎯 AI UTBK Dashboard</h1>
+            <p style="color:#1a56db;margin:0;">{salam}, <strong>{nama_display}</strong>! 👋</p>
         </div>
         """, unsafe_allow_html=True)
     with col_pdf:
@@ -1616,16 +1630,16 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         
         with col1:
             st.markdown(buat_gauge_html(data['peluang']*100, "🎯 Peluang Lolos"), unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['peluang_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#2d5a9e;font-size:0.8rem;'>{data['peluang_kategori']}</p>", unsafe_allow_html=True)
         with col2:
             st.markdown(buat_gauge_html(data['stabilitas'], "🧠 Stabilitas Mental"), unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['stabilitas_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#2d5a9e;font-size:0.8rem;'>{data['stabilitas_kategori']}</p>", unsafe_allow_html=True)
         with col3:
             st.markdown(buat_gauge_html(data['konsistensi'], "📚 Konsistensi Belajar"), unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['konsistensi_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#2d5a9e;font-size:0.8rem;'>{data['konsistensi_kategori']}</p>", unsafe_allow_html=True)
         with col4:
             st.markdown(buat_gauge_html(data['kebiasaan'], "⭐ Kebiasaan Belajar"), unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align:center;color:#a0aec0;font-size:0.8rem;'>{data['kebiasaan_kategori']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align:center;color:#2d5a9e;font-size:0.8rem;'>{data['kebiasaan_kategori']}</p>", unsafe_allow_html=True)
         
         st.divider()
         
@@ -1637,21 +1651,21 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
             
             st.markdown(f"""
             <div class="metric-card">
-                <p style="color:#a0aec0;font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;">📊 Skor Akademik Tertimbang</p>
+                <p style="color:#2d5a9e;font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;">📊 Skor Akademik Tertimbang</p>
                 <div style="display:flex;align-items:baseline;gap:12px;margin:8px 0;">
                     <span style="color:{color_bar};font-size:3rem;font-weight:800;">{data['akademik']:.0f}</span>
-                    <span style="color:#718096;font-size:1rem;">/ {SKOR_MAX_UTBK}</span>
+                    <span style="color:#3a6fa8;font-size:1rem;">/ {SKOR_MAX_UTBK}</span>
                 </div>
-                <p style="color:#a0aec0;font-size:0.8rem;margin-bottom:8px;">Disesuaikan bobot jurusan <strong style="color:#63b3ed;">{data['jurusan']}</strong> ({data['label_kel']})</p>
-                <div style="background:rgba(255,255,255,0.1);border-radius:10px;height:16px;overflow:hidden;">
+                <p style="color:#2d5a9e;font-size:0.8rem;margin-bottom:8px;">Disesuaikan bobot jurusan <strong style="color:#1a56db;">{data['jurusan']}</strong> ({data['label_kel']})</p>
+                <div style="background:rgba(255,255,255,0.80);border-radius:10px;height:16px;overflow:hidden;">
                     <div style="background:linear-gradient(90deg,{color_bar},{color_bar}cc);width:{progress_pct*100:.1f}%;height:16px;border-radius:10px;position:relative;">
                     </div>
                 </div>
                 <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                    <span style="color:#a0aec0;font-size:0.75rem;">0</span>
+                    <span style="color:#2d5a9e;font-size:0.75rem;">0</span>
                     <span style="color:#f6e05e;font-size:0.75rem;">Min Aman: {klaster['skor_min']}</span>
                     <span style="color:#48bb78;font-size:0.75rem;">Aman: {klaster['skor_max']}</span>
-                    <span style="color:#a0aec0;font-size:0.75rem;">{SKOR_MAX_UTBK}</span>
+                    <span style="color:#2d5a9e;font-size:0.75rem;">{SKOR_MAX_UTBK}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1662,12 +1676,12 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
             c_col = c_map.get(status['warna_status'], '#a0aec0')
             st.markdown(f"""
             <div class="metric-card" style="text-align:center;">
-                <p style="color:#a0aec0;font-size:0.85rem;font-weight:600;text-transform:uppercase;">Status Kampus</p>
+                <p style="color:#2d5a9e;font-size:0.85rem;font-weight:600;text-transform:uppercase;">Status Kampus</p>
                 <p style="font-size:2rem;margin:8px 0;">{status['emoji']}</p>
                 <p style="color:{c_col};font-size:1.2rem;font-weight:700;">{status['kategori']}</p>
-                <p style="color:#a0aec0;font-size:0.8rem;">{data['kampus']}</p>
+                <p style="color:#2d5a9e;font-size:0.8rem;">{data['kampus']}</p>
                 <p style="color:{c_col};font-size:1.5rem;font-weight:800;">{status['persentase']}%</p>
-                <p style="color:#718096;font-size:0.75rem;">Estimasi Peluang</p>
+                <p style="color:#3a6fa8;font-size:0.75rem;">Estimasi Peluang</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -1697,8 +1711,8 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         st.markdown(f"""
         <div class="info-box">
             <span style="font-size:1.3rem;">{kl['warna']}</span>
-            <strong style="color:#e2e8f0;font-size:1.1rem;margin-left:8px;">{kl['nama']}</strong>
-            <p style="color:#a0aec0;margin:4px 0 0;">{kl['keterangan']}</p>
+            <strong style="color:#1a2f6e;font-size:1.1rem;margin-left:8px;">{kl['nama']}</strong>
+            <p style="color:#2d5a9e;margin:4px 0 0;">{kl['keterangan']}</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1776,22 +1790,22 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
                 p1 = kampus_kompetitif[0] if kampus_kompetitif else (kampus_aman[0] if kampus_aman else None)
                 if p1:
                     st.markdown(f"""
-                    <div style="background:rgba(252,129,129,0.1);border:1px solid rgba(252,129,129,0.3);border-radius:12px;padding:16px;text-align:center;">
+                    <div style="background:rgba(254,226,226,0.85);border:1px solid rgba(252,129,129,0.3);border-radius:12px;padding:16px;text-align:center;">
                         <p style="color:#fc8181;font-weight:700;font-size:0.85rem;">🏔️ PILIHAN 1 — AMBISIUS</p>
-                        <p style="color:#e2e8f0;font-weight:700;">{p1['kampus']}</p>
-                        <p style="color:#a0aec0;font-size:0.8rem;">{p1['klaster']}</p>
+                        <p style="color:#1a2f6e;font-weight:700;">{p1['kampus']}</p>
+                        <p style="color:#2d5a9e;font-size:0.8rem;">{p1['klaster']}</p>
                         <p style="color:#fc8181;font-weight:600;">Zona: {p1['skor_min']}–{p1['skor_max']}</p>
-                        <p style="color:#a0aec0;font-size:0.75rem;">Gap: {p1['skor_min']-skor_a:.0f} poin menuju zona aman</p>
+                        <p style="color:#2d5a9e;font-size:0.75rem;">Gap: {p1['skor_min']-skor_a:.0f} poin menuju zona aman</p>
                     </div>""", unsafe_allow_html=True)
             
             with col_p2:
                 p2 = kampus_aman[0] if kampus_aman else (kampus_sangat_aman[0] if kampus_sangat_aman else None)
                 if p2:
                     st.markdown(f"""
-                    <div style="background:rgba(246,224,94,0.1);border:1px solid rgba(246,224,94,0.3);border-radius:12px;padding:16px;text-align:center;">
+                    <div style="background:rgba(254,249,195,0.85);border:1px solid rgba(246,224,94,0.3);border-radius:12px;padding:16px;text-align:center;">
                         <p style="color:#f6e05e;font-weight:700;font-size:0.85rem;">⚖️ PILIHAN 2 — REALISTIS</p>
-                        <p style="color:#e2e8f0;font-weight:700;">{p2['kampus']}</p>
-                        <p style="color:#a0aec0;font-size:0.8rem;">{p2['klaster']}</p>
+                        <p style="color:#1a2f6e;font-weight:700;">{p2['kampus']}</p>
+                        <p style="color:#2d5a9e;font-size:0.8rem;">{p2['klaster']}</p>
                         <p style="color:#f6e05e;font-weight:600;">Zona: {p2['skor_min']}–{p2['skor_max']}</p>
                         <p style="color:#48bb78;font-size:0.75rem;">✅ Skor sudah dalam zona aman</p>
                     </div>""", unsafe_allow_html=True)
@@ -1800,10 +1814,10 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
                 p3 = kampus_sangat_aman[0] if kampus_sangat_aman else (kampus_aman[-1] if len(kampus_aman) > 1 else None)
                 if p3:
                     st.markdown(f"""
-                    <div style="background:rgba(72,187,120,0.1);border:1px solid rgba(72,187,120,0.3);border-radius:12px;padding:16px;text-align:center;">
+                    <div style="background:rgba(209,250,229,0.85);border:1px solid rgba(72,187,120,0.3);border-radius:12px;padding:16px;text-align:center;">
                         <p style="color:#48bb78;font-weight:700;font-size:0.85rem;">🛡️ PILIHAN 3 — AMAN</p>
-                        <p style="color:#e2e8f0;font-weight:700;">{p3['kampus']}</p>
-                        <p style="color:#a0aec0;font-size:0.8rem;">{p3['klaster']}</p>
+                        <p style="color:#1a2f6e;font-weight:700;">{p3['kampus']}</p>
+                        <p style="color:#2d5a9e;font-size:0.8rem;">{p3['klaster']}</p>
                         <p style="color:#48bb78;font-weight:600;">Zona: {p3['skor_min']}–{p3['skor_max']}</p>
                         <p style="color:#48bb78;font-size:0.75rem;">🎯 Safety net terjamin</p>
                     </div>""", unsafe_allow_html=True)
@@ -1826,10 +1840,10 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
             with cols[i]:
                 color = "#48bb78" if v >= 0.20 else "#f6e05e" if v >= 0.12 else "#a0aec0"
                 st.markdown(f"""
-                <div style="text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;">
-                    <p style="color:#a0aec0;font-size:0.75rem;margin:0;">{k}</p>
+                <div style="text-align:center;background:rgba(255,255,255,0.85);border:1.5px solid rgba(37,99,235,0.20);border-radius:10px;padding:10px;">
+                    <p style="color:#2d5a9e;font-size:0.75rem;margin:0;">{k}</p>
                     <p style="color:{color};font-size:1.4rem;font-weight:800;margin:4px 0;">{v*100:.0f}%</p>
-                    <p style="color:#718096;font-size:0.7rem;margin:0;">bobot</p>
+                    <p style="color:#3a6fa8;font-size:0.7rem;margin:0;">bobot</p>
                 </div>
                 """, unsafe_allow_html=True)
         
@@ -1883,8 +1897,8 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         with col1:
             st.markdown(f"""
             <div class="metric-card">
-                <p style="color:#a0aec0;font-size:0.85rem;">📌 Profil Belajar</p>
-                <p style="color:#63b3ed;font-size:1.2rem;font-weight:700;">{tipe}</p>
+                <p style="color:#2d5a9e;font-size:0.85rem;">📌 Profil Belajar</p>
+                <p style="color:#1a56db;font-size:1.2rem;font-weight:700;">{tipe}</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -1909,11 +1923,11 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
             hasil = data['lgbm_hasil']
             detail = hasil.get('detail', {})
             st.markdown(f"""
-            <div style="background:linear-gradient(135deg,rgba(66,153,225,0.2),rgba(159,122,234,0.2));
+            <div style="background:linear-gradient(135deg,rgba(219,234,254,0.95),rgba(237,233,254,0.95));
                         border:1px solid rgba(99,179,237,0.4);border-radius:16px;padding:20px;margin-bottom:20px;">
-                <p style="color:#63b3ed;font-weight:700;margin-bottom:4px;">🤖 Rekomendasi AI LightGBM</p>
-                <p style="color:#e2e8f0;font-size:1.3rem;font-weight:800;">{detail.get('icon','')} {hasil['strategi']}</p>
-                <p style="color:#a0aec0;margin:4px 0;">{detail.get('deskripsi','')}</p>
+                <p style="color:#1a56db;font-weight:700;margin-bottom:4px;">🤖 Rekomendasi AI LightGBM</p>
+                <p style="color:#1a2f6e;font-size:1.3rem;font-weight:800;">{detail.get('icon','')} {hasil['strategi']}</p>
+                <p style="color:#2d5a9e;margin:4px 0;">{detail.get('deskripsi','')}</p>
             </div>
             """, unsafe_allow_html=True)
             if detail.get('tips'):
@@ -1963,10 +1977,10 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
             for k, skor, bw, kontrib in priority[:3]:
                 color = "#fc8181" if skor < 500 else "#f6e05e"
                 st.markdown(f"""
-                <div style="background:rgba(255,255,255,0.05);border-left:3px solid {color};
+                <div style="background:rgba(255,255,255,0.85);border-left:3px solid {color};
                             border-radius:8px;padding:10px 14px;margin:6px 0;">
                     <p style="color:{color};font-weight:700;margin:0;">{SUBTES_LABELS[k]} ({k})</p>
-                    <p style="color:#a0aec0;font-size:0.8rem;margin:2px 0;">
+                    <p style="color:#2d5a9e;font-size:0.8rem;margin:2px 0;">
                         Skor: {skor} | Bobot: {bw*100:.0f}% | Kontribusi: {kontrib:.1f}
                     </p>
                 </div>
@@ -2008,22 +2022,22 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
         
         # Info target utama
         st.markdown(f"""
-        <div style="background:linear-gradient(135deg,rgba(66,153,225,0.2),rgba(159,122,234,0.2));
+        <div style="background:linear-gradient(135deg,rgba(219,234,254,0.95),rgba(237,233,254,0.95));
                     border:1px solid rgba(99,179,237,0.4);border-radius:16px;padding:24px;margin-bottom:20px;">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
                 <span style="font-size:2rem;">{peluang_kampus['emoji']}</span>
                 <div>
-                    <p style="color:#e2e8f0;font-size:1.2rem;font-weight:800;margin:0;">Target: {data['jurusan']}</p>
-                    <p style="color:#a0aec0;font-size:0.9rem;margin:0;">di {data['kampus']}</p>
+                    <p style="color:#1a2f6e;font-size:1.2rem;font-weight:800;margin:0;">Target: {data['jurusan']}</p>
+                    <p style="color:#2d5a9e;font-size:0.9rem;margin:0;">di {data['kampus']}</p>
                 </div>
                 <div style="margin-left:auto;text-align:right;">
                     <p style="color:{'#48bb78' if peluang_lolos_ok else '#ed8936'};font-size:1.8rem;font-weight:800;margin:0;">
                         {peluang_kampus['persentase']}%
                     </p>
-                    <p style="color:#a0aec0;font-size:0.8rem;margin:0;">Peluang Lolos</p>
+                    <p style="color:#2d5a9e;font-size:0.8rem;margin:0;">Peluang Lolos</p>
                 </div>
             </div>
-            <p style="color:#a0aec0;font-size:0.85rem;margin:0;">{peluang_kampus['keterangan']}</p>
+            <p style="color:#2d5a9e;font-size:0.85rem;margin:0;">{peluang_kampus['keterangan']}</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -2048,11 +2062,11 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
                     is_strong = skor_k >= klaster['skor_min'] * v / sum(bobot.values())
                     brd = "#48bb78" if v >= 0.20 else "#f6e05e" if v >= 0.12 else "#718096"
                     st.markdown(f"""
-                    <div style="text-align:center;background:rgba(255,255,255,0.05);
+                    <div style="text-align:center;background:rgba(255,255,255,0.85);
                                 border:2px solid {brd};border-radius:10px;padding:10px;">
-                        <p style="color:#a0aec0;font-size:0.75rem;margin:0;">{k}</p>
+                        <p style="color:#2d5a9e;font-size:0.75rem;margin:0;">{k}</p>
                         <p style="color:{brd};font-size:1.3rem;font-weight:800;margin:4px 0;">{v*100:.0f}%</p>
-                        <p style="color:#e2e8f0;font-size:0.8rem;margin:0;">{skor_k}</p>
+                        <p style="color:#1a2f6e;font-size:0.8rem;margin:0;">{skor_k}</p>
                     </div>
                     """, unsafe_allow_html=True)
             
@@ -2132,11 +2146,11 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
                     skor_alt = hitung_skor_akademik(alt, data['PU'], data['PPU'], data['PBM'],
                                                     data['PK'], data['LBI'], data['LBE'], data['PM'])
                     st.markdown(f"""
-                    <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);
+                    <div style="background:rgba(255,255,255,0.85);border:1.5px solid rgba(37,99,235,0.22);
                                 border-radius:12px;padding:12px;text-align:center;height:100%;">
-                        <p style="color:#e2e8f0;font-weight:700;font-size:0.85rem;">{alt}</p>
+                        <p style="color:#1a2f6e;font-weight:700;font-size:0.85rem;">{alt}</p>
                         <p style="color:{color_alt};font-size:1.2rem;font-weight:800;">{skor_alt:.0f}</p>
-                        <p style="color:#a0aec0;font-size:0.7rem;">Skor tertimbang</p>
+                        <p style="color:#2d5a9e;font-size:0.7rem;">Skor tertimbang</p>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -2169,14 +2183,14 @@ def render_dashboard_page(lgbm_model, lgbm_tersedia):
 def render_welcome_page():
     st.markdown("""
     <div class="welcome-hero">
-        <h1 style="color:#e2e8f0;font-size:3rem;font-weight:900;margin-bottom:8px;">🎯 AI UTBK</h1>
-        <h2 style="color:#e2e8f0;font-size:2rem;font-weight:700;margin-bottom:8px;">Readiness Dashboard</h2>
-        <p style="color:#a0aec0;font-size:1.1rem;margin-bottom:20px;">
+        <h1 style="color:#1a2f6e;font-size:3rem;font-weight:900;margin-bottom:8px;">🎯 AI UTBK</h1>
+        <h2 style="color:#1a2f6e;font-size:2rem;font-weight:700;margin-bottom:8px;">Readiness Dashboard</h2>
+        <p style="color:#2d5a9e;font-size:1.1rem;margin-bottom:20px;">
             Sistem analisis kesiapan UTBK berbasis AI — Komprehensif, Personal, Data-Driven
         </p>
-        <div style="display:inline-block;background:rgba(99,179,237,0.2);border:1px solid rgba(99,179,237,0.4);
+        <div style="display:inline-block;background:rgba(219,234,254,0.85);border:1px solid rgba(99,179,237,0.4);
                     border-radius:20px;padding:6px 16px;">
-            <span style="color:#63b3ed;font-size:0.9rem;">✨ Skor UTBK 1000 • Radar TPS • Pipeline Bobot • Export PDF</span>
+            <span style="color:#1a56db;font-size:0.9rem;">✨ Skor UTBK 1000 • Radar TPS • Pipeline Bobot • Export PDF</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -2197,8 +2211,8 @@ def render_welcome_page():
             st.markdown(f"""
             <div class="feature-card">
                 <p style="font-size:2rem;margin:0 0 8px;">{icon}</p>
-                <p style="color:#e2e8f0;font-weight:700;font-size:1rem;margin:0 0 6px;">{title}</p>
-                <p style="color:#718096;font-size:0.85rem;margin:0;">{desc}</p>
+                <p style="color:#1a2f6e;font-weight:700;font-size:1rem;margin:0 0 6px;">{title}</p>
+                <p style="color:#3a6fa8;font-size:0.85rem;margin:0;">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
     
@@ -2211,7 +2225,7 @@ def render_welcome_page():
             st.rerun()
     
     st.markdown("""
-    <p style="text-align:center;color:#4a5568;font-size:0.85rem;margin-top:16px;">
+    <p style="text-align:center;color:#1e3a6e;font-size:0.85rem;margin-top:16px;">
         Gratis • Privat • Berbasis AI • Tidak perlu login
     </p>
     """, unsafe_allow_html=True)
@@ -2236,8 +2250,8 @@ def main():
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center;padding:16px 0;">
-            <h2 style="color:#e2e8f0;margin:0;">🎯 UTBK AI</h2>
-            <p style="color:#4a5568;font-size:0.8rem;margin:4px 0;">Dashboard v2.0</p>
+            <h2 style="color:#1a2f6e;margin:0;">🎯 UTBK AI</h2>
+            <p style="color:#1e3a6e;font-size:0.8rem;margin:4px 0;">Dashboard v2.0</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -2261,10 +2275,10 @@ def main():
         
         st.markdown("""
         <div style="padding:8px;">
-            <p style="color:#4a5568;font-size:0.75rem;text-align:center;">
-                Skor Max UTBK: <strong style="color:#63b3ed;">1000</strong><br>
-                AI Model: <strong style="color:#63b3ed;">LightGBM</strong><br>
-                Charts: <strong style="color:#63b3ed;">Plotly Interactive</strong>
+            <p style="color:#1e3a6e;font-size:0.75rem;text-align:center;">
+                Skor Max UTBK: <strong style="color:#1a56db;">1000</strong><br>
+                AI Model: <strong style="color:#1a56db;">LightGBM</strong><br>
+                Charts: <strong style="color:#1a56db;">Plotly Interactive</strong>
             </p>
         </div>
         """, unsafe_allow_html=True)
