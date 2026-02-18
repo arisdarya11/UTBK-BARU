@@ -1,2021 +1,1189 @@
 """
-AI UTBK Readiness Dashboard
-Sistem analisis kesiapan UTBK berbasis AI dengan pendekatan holistik
+AI UTBK Readiness Dashboard — FINAL EDITION v4
+═══════════════════════════════════════════════
+Fitur:
+  ✅ Multi-halaman survey (4 step)
+  ✅ Skor maks 1000
+  ✅ Radar Chart TPS
+  ✅ Bar Chart & Pipeline Chart
+  ✅ Bobot jurusan & kampus ditampilkan
+  ✅ Fokus jurusan target jika skor aman (alternatif = formalitas)
+  ✅ Export PDF
+  ✅ Model LGBM asli diintegrasikan
 """
 
 import streamlit as st
 import numpy as np
 import pandas as pd
-import pickle
-import os
-from typing import Dict, Tuple
+import pickle, os, io, base64, datetime
+from typing import Dict, Tuple, List
+import plotly.graph_objects as go
+import plotly.express as px
+
+# ══════════════════════════════════════════════════════════════
+# PAGE CONFIG
+# ══════════════════════════════════════════════════════════════
+st.set_page_config(page_title="AI UTBK Dashboard", page_icon="🎓",
+                   layout="wide", initial_sidebar_state="collapsed")
+
+# ══════════════════════════════════════════════════════════════
+# GLOBAL CSS
+# ══════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700;800&display=swap');
+
+:root {
+  --bg:      #0d1117;
+  --surf:    #161b22;
+  --surf2:   #21262d;
+  --border:  #30363d;
+  --gold:    #e3a008;
+  --blue:    #58a6ff;
+  --green:   #3fb950;
+  --red:     #f85149;
+  --orange:  #d29922;
+  --purple:  #bc8cff;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --r:       14px;
+}
+html,body,[class*="css"],.stApp{
+  background:var(--bg)!important;
+  font-family:'Inter',sans-serif!important;
+  color:var(--text)!important;
+}
+#MainMenu,footer,header{visibility:hidden}
+.stDeployButton{display:none}
+.block-container{padding:1.2rem 2rem!important;max-width:100%!important}
+
+/* ── NAV ── */
+.nav{background:var(--surf);border-bottom:1px solid var(--border);
+  padding:.8rem 2rem;display:flex;align-items:center;gap:1.5rem;
+  margin:-1.2rem -2rem 1.8rem -2rem;position:sticky;top:0;z-index:999}
+.nav-brand{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;
+  font-weight:800;color:var(--gold)!important;display:flex;align-items:center;gap:.4rem}
+.nav-step{font-size:.78rem;font-weight:600;color:var(--muted);
+  padding:.35rem .85rem;border-radius:99px;cursor:default}
+.nav-step.active{background:rgba(227,160,8,.12);color:var(--gold);
+  border:1px solid rgba(227,160,8,.3)}
+.nav-step.done{color:var(--green)}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,#0d1117 0%,#1a2236 50%,#0e1f35 100%);
+  border:1px solid var(--border);border-radius:var(--r);padding:2.5rem;
+  margin-bottom:2rem;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-80px;right:-80px;width:350px;height:350px;
+  border-radius:50%;background:radial-gradient(circle,rgba(227,160,8,.07) 0%,transparent 70%)}
+.hero h1{font-family:'Space Grotesk',sans-serif!important;font-size:2.2rem!important;
+  font-weight:800!important;color:#fff!important;margin:0 0 .5rem!important;line-height:1.15!important}
+.hero h1 span{color:var(--gold)}
+.hero p{color:var(--muted);font-size:.95rem;margin:0}
+
+/* ── CARDS ── */
+.card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:1.3rem 1.5rem}
+.kpi-lbl{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--muted);margin-bottom:.35rem}
+.kpi-val{font-family:'Space Grotesk',sans-serif;font-size:2rem;font-weight:800;line-height:1}
+.kpi-sub{font-size:.74rem;color:var(--muted);margin-top:.2rem}
+.c-gold{color:var(--gold)}.c-blue{color:var(--blue)}.c-green{color:var(--green)}
+.c-red{color:var(--red)}.c-orange{color:var(--orange)}.c-purple{color:var(--purple)}
+
+/* ── SECTION TITLE ── */
+.sec{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;
+  color:var(--text);margin:1.8rem 0 .9rem;padding-bottom:.4rem;
+  border-bottom:2px solid var(--border)}
+
+/* ── ALERTS ── */
+.al{border-radius:var(--r);padding:1.1rem 1.4rem;margin-bottom:.9rem;
+  border-left:4px solid;font-size:.87rem;line-height:1.7}
+.al h4{margin:0 0 .45rem;font-size:.92rem;font-weight:700}
+.al ul{margin:.4rem 0 0;padding-left:1.2rem}
+.al-s{background:rgba(63,185,80,.08);border-color:var(--green)}
+.al-w{background:rgba(210,153,34,.08);border-color:var(--orange)}
+.al-d{background:rgba(248,81,73,.08);border-color:var(--red)}
+.al-i{background:rgba(88,166,255,.08);border-color:var(--blue)}
+
+/* ── PROGRESS BARS ── */
+.prog-wrap{margin-bottom:.75rem}
+.prog-lbl{display:flex;justify-content:space-between;font-size:.8rem;
+  font-weight:600;color:var(--text);margin-bottom:3px}
+.prog-bg{background:var(--surf2);border-radius:99px;height:9px;overflow:hidden}
+.prog-fill{height:100%;border-radius:99px}
+
+/* ── FORM ── */
+.form-box{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);
+  padding:1.8rem 2rem;margin-bottom:1.4rem}
+.form-box h3{font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700;
+  color:var(--gold);margin:0 0 1.2rem;display:flex;align-items:center;gap:.4rem}
+
+/* ── STEP BAR ── */
+.step-row{display:flex;gap:0;margin-bottom:2rem;background:var(--surf);
+  border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.step-item{flex:1;padding:.9rem;text-align:center;font-size:.78rem;font-weight:600;
+  color:var(--muted);border-right:1px solid var(--border)}
+.step-item:last-child{border-right:none}
+.step-item.active{background:rgba(227,160,8,.1);color:var(--gold)}
+.step-item.done{background:rgba(63,185,80,.07);color:var(--green)}
+.step-num{display:block;font-size:1.25rem;font-family:'Space Grotesk',sans-serif;
+  font-weight:800;margin-bottom:1px}
+
+/* ── BOBOT CHIP ── */
+.bobot-chip{display:inline-flex;flex-direction:column;align-items:center;
+  background:rgba(227,160,8,.08);border:1px solid rgba(227,160,8,.2);
+  border-radius:10px;padding:.5rem .7rem;margin:.2rem}
+.bobot-chip .sk{font-size:.68rem;color:var(--muted);margin-bottom:1px}
+.bobot-chip .bv{font-size:1.05rem;font-weight:800;color:var(--gold);
+  font-family:'Space Grotesk',sans-serif}
+
+/* ── STREAMLIT OVERRIDES ── */
+div[data-testid="stButton"] button[kind="primary"]{
+  background:var(--gold)!important;color:#000!important;font-weight:700!important;
+  font-family:'Space Grotesk',sans-serif!important;border:none!important;
+  border-radius:10px!important;font-size:.9rem!important}
+div[data-testid="stButton"] button{
+  background:var(--surf2)!important;color:var(--text)!important;
+  border:1px solid var(--border)!important;border-radius:10px!important}
+div[data-testid="stTabs"] button[data-baseweb="tab"]{
+  font-family:'Space Grotesk',sans-serif!important;font-weight:600!important;
+  font-size:.83rem!important;color:var(--muted)!important}
+div[data-testid="stTabs"] button[aria-selected="true"]{
+  color:var(--gold)!important;border-bottom-color:var(--gold)!important}
+div[data-testid="stMetric"]{background:var(--surf)!important;
+  border:1px solid var(--border)!important;border-radius:var(--r)!important;
+  padding:1rem 1.2rem!important}
+div[data-testid="stExpander"]{background:var(--surf)!important;
+  border:1px solid var(--border)!important;border-radius:var(--r)!important}
+label,div[data-testid="stSelectbox"] label,div[data-testid="stTextInput"] label{
+  color:var(--text)!important}
+</style>
+""", unsafe_allow_html=True)
 
 
-# ======================================
-# LOAD MODEL LGBM
-# ======================================
-
-@st.cache_resource
-def load_lgbm_model():
-    """Load model LightGBM dari file .pkl"""
-    model_path = os.path.join(os.path.dirname(__file__), "lgbm_model_2_.pkl")
-    try:
-        with open(model_path, "rb") as f:
-            model = pickle.load(f)
-        return model, True
-    except FileNotFoundError:
-        return None, False
-    except Exception as e:
-        st.warning(f"⚠️ Model LGBM tidak dapat dimuat: {e}. Menggunakan kalkulasi manual.")
-        return None, False
+# ══════════════════════════════════════════════════════════════
+# SESSION STATE
+# ══════════════════════════════════════════════════════════════
+for k, v in [('page','home'),('step',1),('data',{}),('result',None)]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 
+# ══════════════════════════════════════════════════════════════
+# KONSTANTA
+# ══════════════════════════════════════════════════════════════
+SKOR_MIN = 200
+SKOR_MAX = 1000
+
+SUBTES = ["PU","PPU","PBM","PK","LBI","LBE","PM"]
+SUBTES_LABEL = {
+    "PU":"Penalaran Umum","PPU":"Pem. & Pengetahuan Umum",
+    "PBM":"Pemahaman Bacaan & Menulis","PK":"Pengetahuan Kuantitatif",
+    "LBI":"Literasi Bahasa Indonesia","LBE":"Literasi Bahasa Inggris",
+    "PM":"Penalaran Matematika"
+}
+SUBTES_COLOR = {
+    "PU":"#e3a008","PPU":"#58a6ff","PBM":"#bc8cff",
+    "PK":"#f85149","LBI":"#3fb950","LBE":"#79c0ff","PM":"#ff7b72"
+}
+
+DAFTAR_JURUSAN = [
+    "Kedokteran","Kedokteran Gigi",
+    "Teknik Sipil","Teknik Mesin","Teknik Elektro","Teknik Industri","Teknik Kimia","Teknik Informatika",
+    "Matematika","Fisika","Kimia","Biologi","Statistika","Aktuaria",
+    "Farmasi","Gizi","Keperawatan","Kesehatan Masyarakat",
+    "Ilmu Hukum","Ekonomi","Manajemen","Akuntansi","Bisnis",
+    "Psikologi","Ilmu Komunikasi","Hubungan Internasional","Administrasi Publik",
+    "Sastra Inggris","Pendidikan Bahasa Indonesia","Pendidikan Bahasa Inggris",
+    "Sosiologi","Ilmu Politik","Sejarah","Geografi"
+]
+
+# Bobot per jurusan (total = 1.0, skala skor maks 1000)
+BOBOT_MAP = {
+    "Kedokteran"            :{"PU":.20,"PPU":.15,"PBM":.10,"PK":.15,"LBI":.10,"LBE":.10,"PM":.20},
+    "Kedokteran Gigi"       :{"PU":.20,"PPU":.15,"PBM":.10,"PK":.15,"LBI":.10,"LBE":.10,"PM":.20},
+    "Teknik Informatika"    :{"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
+    "Teknik Sipil"          :{"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
+    "Teknik Mesin"          :{"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
+    "Teknik Elektro"        :{"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
+    "Teknik Industri"       :{"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
+    "Teknik Kimia"          :{"PU":.18,"PPU":.08,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.07,"PM":.37},
+    "Matematika"            :{"PU":.15,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.05,"PM":.45},
+    "Fisika"                :{"PU":.18,"PPU":.07,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.05,"PM":.40},
+    "Kimia"                 :{"PU":.18,"PPU":.10,"PBM":.07,"PK":.18,"LBI":.07,"LBE":.05,"PM":.35},
+    "Biologi"               :{"PU":.20,"PPU":.15,"PBM":.10,"PK":.15,"LBI":.10,"LBE":.08,"PM":.22},
+    "Statistika"            :{"PU":.15,"PPU":.07,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.05,"PM":.43},
+    "Aktuaria"              :{"PU":.15,"PPU":.07,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.05,"PM":.43},
+    "Farmasi"               :{"PU":.18,"PPU":.12,"PBM":.08,"PK":.18,"LBI":.08,"LBE":.08,"PM":.28},
+    "Gizi"                  :{"PU":.18,"PPU":.12,"PBM":.10,"PK":.15,"LBI":.12,"LBE":.08,"PM":.25},
+    "Keperawatan"           :{"PU":.18,"PPU":.12,"PBM":.12,"PK":.12,"LBI":.15,"LBE":.08,"PM":.23},
+    "Kesehatan Masyarakat"  :{"PU":.20,"PPU":.12,"PBM":.12,"PK":.12,"LBI":.15,"LBE":.08,"PM":.21},
+    "Ilmu Hukum"            :{"PU":.22,"PPU":.18,"PBM":.20,"PK":.08,"LBI":.18,"LBE":.10,"PM":.04},
+    "Ekonomi"               :{"PU":.20,"PPU":.15,"PBM":.10,"PK":.20,"LBI":.10,"LBE":.10,"PM":.15},
+    "Manajemen"             :{"PU":.20,"PPU":.15,"PBM":.12,"PK":.18,"LBI":.12,"LBE":.10,"PM":.13},
+    "Akuntansi"             :{"PU":.18,"PPU":.15,"PBM":.10,"PK":.22,"LBI":.10,"LBE":.10,"PM":.15},
+    "Bisnis"                :{"PU":.20,"PPU":.15,"PBM":.12,"PK":.18,"LBI":.12,"LBE":.10,"PM":.13},
+    "Psikologi"             :{"PU":.22,"PPU":.15,"PBM":.18,"PK":.10,"LBI":.18,"LBE":.10,"PM":.07},
+    "Ilmu Komunikasi"       :{"PU":.20,"PPU":.15,"PBM":.22,"PK":.08,"LBI":.20,"LBE":.10,"PM":.05},
+    "Hubungan Internasional":{"PU":.20,"PPU":.15,"PBM":.15,"PK":.08,"LBI":.17,"LBE":.20,"PM":.05},
+    "Administrasi Publik"   :{"PU":.22,"PPU":.15,"PBM":.18,"PK":.08,"LBI":.20,"LBE":.10,"PM":.07},
+    "Sastra Inggris"        :{"PU":.12,"PPU":.12,"PBM":.20,"PK":.05,"LBI":.15,"LBE":.31,"PM":.05},
+    "Pendidikan Bahasa Indonesia":{"PU":.12,"PPU":.12,"PBM":.22,"PK":.05,"LBI":.32,"LBE":.12,"PM":.05},
+    "Pendidikan Bahasa Inggris"  :{"PU":.12,"PPU":.12,"PBM":.18,"PK":.05,"LBI":.12,"LBE":.33,"PM":.08},
+    "Sosiologi"             :{"PU":.22,"PPU":.17,"PBM":.18,"PK":.08,"LBI":.18,"LBE":.10,"PM":.07},
+    "Ilmu Politik"          :{"PU":.22,"PPU":.17,"PBM":.18,"PK":.08,"LBI":.18,"LBE":.10,"PM":.07},
+    "Sejarah"               :{"PU":.20,"PPU":.20,"PBM":.18,"PK":.05,"LBI":.22,"LBE":.10,"PM":.05},
+    "Geografi"              :{"PU":.20,"PPU":.15,"PBM":.15,"PK":.12,"LBI":.15,"LBE":.08,"PM":.15},
+}
+DEFAULT_BOBOT = {"PU":.15,"PPU":.15,"PBM":.15,"PK":.15,"LBI":.15,"LBE":.15,"PM":.10}
+
+# PTN dengan skor skala 1000
+PTN_DATA = {
+    "Universitas Indonesia (UI)"                :{"klaster":1,"min":780,"max":870,"label":"⭐ Klaster 1 — Top Tier"},
+    "Universitas Gadjah Mada (UGM)"             :{"klaster":1,"min":780,"max":870,"label":"⭐ Klaster 1 — Top Tier"},
+    "Institut Teknologi Bandung (ITB)"          :{"klaster":1,"min":790,"max":880,"label":"⭐ Klaster 1 — Top Tier"},
+    "Universitas Padjadjaran (Unpad)"           :{"klaster":1,"min":760,"max":840,"label":"⭐ Klaster 1 — Top Tier"},
+    "Institut Pertanian Bogor (IPB)"            :{"klaster":1,"min":750,"max":830,"label":"⭐ Klaster 1 — Top Tier"},
+    "Universitas Diponegoro (Undip)"            :{"klaster":2,"min":700,"max":780,"label":"🔷 Klaster 2 — Mng Atas"},
+    "Universitas Airlangga (Unair)"             :{"klaster":2,"min":710,"max":790,"label":"🔷 Klaster 2 — Mng Atas"},
+    "Universitas Brawijaya (UB)"                :{"klaster":2,"min":680,"max":760,"label":"🔷 Klaster 2 — Mng Atas"},
+    "Institut Teknologi Sepuluh Nopember (ITS)" :{"klaster":2,"min":710,"max":790,"label":"🔷 Klaster 2 — Mng Atas"},
+    "Universitas Sebelas Maret (UNS)"           :{"klaster":2,"min":660,"max":740,"label":"🔷 Klaster 2 — Mng Atas"},
+    "Universitas Hasanuddin (Unhas)"            :{"klaster":2,"min":660,"max":740,"label":"🔷 Klaster 2 — Mng Atas"},
+    "Universitas Negeri Yogyakarta (UNY)"       :{"klaster":3,"min":610,"max":690,"label":"🔹 Klaster 3 — Menengah"},
+    "Universitas Negeri Semarang (UNNES)"       :{"klaster":3,"min":600,"max":680,"label":"🔹 Klaster 3 — Menengah"},
+    "Universitas Negeri Malang (UM)"            :{"klaster":3,"min":600,"max":680,"label":"🔹 Klaster 3 — Menengah"},
+    "Universitas Andalas (Unand)"               :{"klaster":3,"min":600,"max":680,"label":"🔹 Klaster 3 — Menengah"},
+    "Universitas Sumatera Utara (USU)"          :{"klaster":3,"min":590,"max":670,"label":"🔹 Klaster 3 — Menengah"},
+    "Universitas Sriwijaya (Unsri)"             :{"klaster":4,"min":550,"max":630,"label":"🔸 Klaster 4 — Regional"},
+    "Universitas Lampung (Unila)"               :{"klaster":4,"min":540,"max":620,"label":"🔸 Klaster 4 — Regional"},
+    "Universitas Jember (Unej)"                 :{"klaster":4,"min":535,"max":615,"label":"🔸 Klaster 4 — Regional"},
+    "Universitas Riau (Unri)"                   :{"klaster":4,"min":530,"max":610,"label":"🔸 Klaster 4 — Regional"},
+}
+DAFTAR_PTN = list(PTN_DATA.keys())
+
+# Jurusan alternatif formalitas
+ALTERNATIF_MAP = {
+    "Kedokteran":["Keperawatan","Farmasi","Gizi"],
+    "Kedokteran Gigi":["Farmasi","Keperawatan","Kesehatan Masyarakat"],
+    "Teknik Informatika":["Statistika","Matematika","Teknik Elektro"],
+    "Teknik Sipil":["Teknik Industri","Teknik Mesin","Fisika"],
+    "Teknik Mesin":["Teknik Industri","Teknik Sipil","Fisika"],
+    "Teknik Elektro":["Teknik Informatika","Fisika","Matematika"],
+    "Teknik Industri":["Teknik Sipil","Manajemen","Statistika"],
+    "Teknik Kimia":["Kimia","Farmasi","Teknik Industri"],
+    "Matematika":["Statistika","Aktuaria","Fisika"],
+    "Fisika":["Matematika","Teknik Mesin","Teknik Elektro"],
+    "Kimia":["Farmasi","Teknik Kimia","Biologi"],
+    "Biologi":["Gizi","Keperawatan","Kimia"],
+    "Statistika":["Matematika","Aktuaria","Teknik Informatika"],
+    "Aktuaria":["Statistika","Matematika","Ekonomi"],
+    "Farmasi":["Kimia","Gizi","Kesehatan Masyarakat"],
+    "Gizi":["Keperawatan","Farmasi","Kesehatan Masyarakat"],
+    "Keperawatan":["Gizi","Kesehatan Masyarakat","Farmasi"],
+    "Kesehatan Masyarakat":["Keperawatan","Gizi","Biologi"],
+    "Ilmu Hukum":["Administrasi Publik","Ilmu Politik","Sosiologi"],
+    "Ekonomi":["Akuntansi","Manajemen","Bisnis"],
+    "Manajemen":["Ekonomi","Bisnis","Akuntansi"],
+    "Akuntansi":["Manajemen","Ekonomi","Bisnis"],
+    "Bisnis":["Manajemen","Ekonomi","Akuntansi"],
+    "Psikologi":["Ilmu Komunikasi","Sosiologi","Administrasi Publik"],
+    "Ilmu Komunikasi":["Hubungan Internasional","Administrasi Publik","Psikologi"],
+    "Hubungan Internasional":["Ilmu Komunikasi","Ilmu Politik","Sejarah"],
+    "Administrasi Publik":["Ilmu Politik","Sosiologi","Ilmu Hukum"],
+    "Sastra Inggris":["Pendidikan Bahasa Inggris","Hubungan Internasional","Ilmu Komunikasi"],
+    "Pendidikan Bahasa Indonesia":["Sastra Inggris","Ilmu Komunikasi","Sosiologi"],
+    "Pendidikan Bahasa Inggris":["Sastra Inggris","Hubungan Internasional","Ilmu Komunikasi"],
+    "Sosiologi":["Ilmu Politik","Administrasi Publik","Psikologi"],
+    "Ilmu Politik":["Sosiologi","Hubungan Internasional","Administrasi Publik"],
+    "Sejarah":["Sosiologi","Geografi","Ilmu Politik"],
+    "Geografi":["Sejarah","Sosiologi","Kesehatan Masyarakat"],
+}
+
+# Label strategi dari model LGBM
 LABEL_STRATEGI = [
     "Intensif & Terstruktur",
     "Penguatan Mental",
     "Optimasi & Review",
     "Pertahankan & Tingkatkan"
 ]
-
 DESKRIPSI_STRATEGI = {
-    "Intensif & Terstruktur": {
-        "icon": "🔴",
-        "deskripsi": "Kebiasaan belajar dan kondisi psikologis perlu ditingkatkan secara bersamaan.",
-        "tips": [
-            "Buat jadwal belajar harian yang ketat dan konsisten",
-            "Mulai dari 2 jam/hari lalu tingkatkan bertahap",
-            "Gunakan metode Pomodoro (25 menit fokus, 5 menit istirahat)",
-            "Cari teman belajar atau bergabung dengan kelompok belajar",
-            "Konsultasi dengan guru/mentor untuk panduan belajar"
-        ]
-    },
-    "Penguatan Mental": {
-        "icon": "🟠",
-        "deskripsi": "Kebiasaan belajar sudah cukup baik, namun kondisi psikologis perlu diperkuat.",
-        "tips": [
-            "Latihan mindfulness atau meditasi 10 menit sebelum belajar",
-            "Buat target kecil harian agar rasa percaya diri meningkat",
-            "Kurangi perbandingan diri dengan orang lain",
-            "Tetapkan rutinitas tidur yang baik untuk mengurangi kecemasan",
-            "Lakukan simulasi ujian (tryout) secara rutin untuk membiasakan diri"
-        ]
-    },
-    "Optimasi & Review": {
-        "icon": "🟡",
-        "deskripsi": "Kebiasaan dan mental sudah baik, tingkatkan kualitas review dan evaluasi soal.",
-        "tips": [
-            "Perbanyak review soal-soal yang pernah salah",
-            "Analisis pola kesalahan di setiap subtes",
-            "Tingkatkan frekuensi tryout menjadi minimal 2x/bulan",
-            "Buat catatan ringkasan materi yang sering keluar",
-            "Fokus pada efisiensi waktu mengerjakan soal"
-        ]
-    },
-    "Pertahankan & Tingkatkan": {
-        "icon": "🟢",
-        "deskripsi": "Kebiasaan belajar dan kondisi psikologis sudah sangat baik!",
-        "tips": [
-            "Pertahankan konsistensi dan jangan lengah",
-            "Tingkatkan target skor tryout secara bertahap",
-            "Mulai fokus pada strategi manajemen waktu saat ujian",
-            "Bantu teman yang kesulitan — mengajar memperkuat pemahaman",
-            "Jaga kesehatan fisik agar performa tetap optimal"
-        ]
-    }
+    "Intensif & Terstruktur":{"icon":"🔴","deskripsi":"Kebiasaan belajar dan kondisi psikologis perlu ditingkatkan secara bersamaan.",
+        "tips":["Buat jadwal belajar harian yang ketat dan konsisten","Mulai dari 2 jam/hari lalu tingkatkan bertahap","Gunakan metode Pomodoro","Cari teman belajar atau kelompok belajar","Konsultasi dengan guru/mentor"]},
+    "Penguatan Mental":{"icon":"🟠","deskripsi":"Kebiasaan belajar sudah cukup baik, namun kondisi psikologis perlu diperkuat.",
+        "tips":["Latihan mindfulness 10 menit sebelum belajar","Buat target kecil harian","Kurangi perbandingan diri","Tetapkan rutinitas tidur yang baik","Tryout rutin untuk membiasakan tekanan"]},
+    "Optimasi & Review":{"icon":"🟡","deskripsi":"Kebiasaan dan mental sudah baik, tingkatkan kualitas review dan evaluasi.",
+        "tips":["Perbanyak review soal yang pernah salah","Analisis pola kesalahan tiap subtes","Tryout minimal 2x/bulan","Buat catatan ringkasan materi","Fokus efisiensi waktu mengerjakan soal"]},
+    "Pertahankan & Tingkatkan":{"icon":"🟢","deskripsi":"Kebiasaan belajar dan kondisi psikologis sudah sangat baik!",
+        "tips":["Pertahankan konsistensi","Tingkatkan target skor tryout bertahap","Fokus manajemen waktu saat ujian","Bantu teman belajar","Jaga kesehatan fisik"]},
 }
 
 
-def prediksi_lgbm(model, input_data: Dict) -> Dict:
-    """
-    Melakukan prediksi strategi belajar menggunakan model LightGBM Classifier.
-    
-    Fitur: 9 kolom kebiasaan belajar + psikologi (TANPA skor TPS — bebas leakage)
-    Output: Rekomendasi strategi belajar (4 kategori)
-    """
+# ══════════════════════════════════════════════════════════════
+# LOAD MODEL
+# ══════════════════════════════════════════════════════════════
+@st.cache_resource
+def load_lgbm():
+    for fname in ["lgbm_model_2_.pkl","lgbm_model.pkl","model_skor_utbk_asli.pkl"]:
+        if os.path.exists(fname):
+            try:
+                with open(fname,"rb") as f:
+                    return pickle.load(f), fname
+            except: pass
+    return None, None
+
+lgbm_model, lgbm_fname = load_lgbm()
+
+
+# ══════════════════════════════════════════════════════════════
+# KALKULASI
+# ══════════════════════════════════════════════════════════════
+def get_bobot(jurusan):
+    return BOBOT_MAP.get(jurusan, DEFAULT_BOBOT)
+
+def hitung_tertimbang(skor, bobot):
+    return sum(skor[k]*bobot[k] for k in SUBTES)
+
+def ptn_info(kampus):
+    return PTN_DATA.get(kampus, {"klaster":4,"min":535,"max":615,"label":"🔸 Klaster 4"})
+
+def hitung_peluang(sw, kampus):
+    info = ptn_info(kampus)
+    mn,mx = info["min"],info["max"]
+    gap = sw - mn
+    if sw >= mx:      return "Sangat Aman","#3fb950",min(92.,75+(sw-mx)/mx*15)
+    elif sw >= mn:    return "Aman","#3fb950",60+(sw-mn)/(mx-mn)*15
+    elif sw >= mn-60: return "Kompetitif","#d29922",30+(60+gap)/60*25
+    elif sw >= mn-120:return "Berisiko","#f85149",15.
+    else:             return "Perlu Peningkatan","#f85149",8.
+
+def prediksi_lgbm(model, inp):
     try:
-        # Susun 9 fitur — tanpa skor TPS
-        fitur = pd.DataFrame([{
-            "Jam_Belajar"      : input_data["jam_belajar"],
-            "Hari_Belajar"     : input_data["hari_belajar"],
-            "Latihan_Soal"     : input_data["latihan_soal"],
-            "Frekuensi_Tryout" : input_data["frekuensi_tryout"],
-            "Review_Soal"      : input_data["review_soal"],
-            "Fokus"            : input_data["fokus"],
-            "Percaya_Diri"     : input_data["percaya_diri"],
-            "Kecemasan_Rev"    : 6 - input_data["kecemasan"],  # reverse scoring
-            "Distraksi_Rev"    : 6 - input_data["distraksi"],  # reverse scoring
+        feat = pd.DataFrame([{
+            "Jam_Belajar":inp["jam_belajar"],"Hari_Belajar":inp["hari_belajar"],
+            "Latihan_Soal":inp["latihan_soal"],"Frekuensi_Tryout":inp["frekuensi_tryout"],
+            "Review_Soal":inp["review_soal"],"Fokus":inp["fokus"],
+            "Percaya_Diri":inp["percaya_diri"],
+            "Kecemasan_Rev":6-inp["kecemasan"],"Distraksi_Rev":6-inp["distraksi"],
         }])
-
-        # Sesuaikan urutan kolom dengan model
-        if hasattr(model, "feature_name_"):
-            fitur = fitur.reindex(columns=model.feature_name_, fill_value=0)
-        elif hasattr(model, "feature_names_in_"):
-            fitur = fitur.reindex(columns=model.feature_names_in_, fill_value=0)
-
-        # Prediksi kelas & probabilitas
-        kode_strategi = int(model.predict(fitur)[0])
-        label_strategi = LABEL_STRATEGI[kode_strategi] if kode_strategi < len(LABEL_STRATEGI) else "Pertahankan & Tingkatkan"
-
-        if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(fitur)[0]
-            kepercayaan = float(proba[kode_strategi]) * 100
-        else:
-            proba = None
-            kepercayaan = None
-
-        return {
-            "sukses"        : True,
-            "kode"          : kode_strategi,
-            "strategi"      : label_strategi,
-            "kepercayaan"   : kepercayaan,
-            "probabilitas"  : proba.tolist() if proba is not None else None,
-            "detail"        : DESKRIPSI_STRATEGI.get(label_strategi, {})
-        }
-
+        if hasattr(model,"feature_name_"):
+            feat = feat.reindex(columns=model.feature_name_,fill_value=0)
+        elif hasattr(model,"feature_names_in_"):
+            feat = feat.reindex(columns=model.feature_names_in_,fill_value=0)
+        kode = int(model.predict(feat)[0])
+        label = LABEL_STRATEGI[kode] if kode < len(LABEL_STRATEGI) else LABEL_STRATEGI[-1]
+        kepercayaan = None
+        if hasattr(model,"predict_proba"):
+            proba = model.predict_proba(feat)[0]
+            kepercayaan = float(proba[kode])*100
+        return {"sukses":True,"kode":kode,"strategi":label,"kepercayaan":kepercayaan,
+                "detail":DESKRIPSI_STRATEGI.get(label,{})}
     except Exception as e:
-        return {"sukses": False, "error": str(e)}
+        return {"sukses":False,"error":str(e)}
+
+def hitung_semua(data):
+    skor  = {k: data[k] for k in SUBTES}
+    bobot = get_bobot(data["jurusan"])
+    sw    = hitung_tertimbang(skor, bobot)
+    rata  = np.mean(list(skor.values()))
+    pl, pc, ppct = hitung_peluang(sw, data["kampus"])
+    info  = ptn_info(data["kampus"])
+    gap   = sw - info["min"]
+
+    # Psikologis (0–100)
+    psiko = (data["fokus"]*1.5+data["percaya_diri"]*1.5+(6-data["kecemasan"])+(6-data["distraksi"]))/20*100
+    # Konsistensi (0–100)
+    konsist = min(100,(data["jam_belajar"]*2+data["hari_belajar"]*2.2+
+                       data["latihan_soal"]*1.8+data["frekuensi_tryout"]*1.5+data["review_soal"]*1.5)*2)
+    # Stabilitas mental
+    positif=(data["fokus"]*1.5+data["percaya_diri"]*1.5)*10
+    negatif=(data["kecemasan"]*1.2+data["distraksi"]*1.2)*8
+    stabilitas=max(0,min(100,positif-negatif+50))
+    # Risiko
+    rgb=(stabilitas*0.6+konsist*0.4)
+    if rgb>=75:   risk=("Rendah","✅","Kemungkinan perform sesuai atau di atas kemampuan")
+    elif rgb>=60: risk=("Sedang","⚠️","Ada potensi fluktuasi performa, jaga konsistensi")
+    else:         risk=("Tinggi","🔴","Risiko perform di bawah kemampuan, perlu perbaikan")
+    # LGBM
+    lgbm_hasil = prediksi_lgbm(lgbm_model, data) if lgbm_model else None
+    # Peluang terpenuhi?
+    terpenuhi = pl in ("Sangat Aman","Aman")
+
+    return {**data,"skor":skor,"bobot":bobot,"sw":sw,"rata":rata,
+            "pl":pl,"pc":pc,"ppct":ppct,"info":info,"gap":gap,
+            "psiko":psiko,"konsist":konsist,"stabilitas":stabilitas,"risk":risk,
+            "lgbm_hasil":lgbm_hasil,"terpenuhi":terpenuhi,
+            "alternatif":ALTERNATIF_MAP.get(data["jurusan"],[])}
 
 
-# ====================================== 
-# KONFIGURASI APLIKASI
-# ====================================== 
+# ══════════════════════════════════════════════════════════════
+# CHART HELPERS
+# ══════════════════════════════════════════════════════════════
+CTHEME = dict(paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',
+              font=dict(family='Inter',color='#e6edf3'),margin=dict(l=10,r=10,t=45,b=10))
 
-def setup_page():
-    """Konfigurasi halaman aplikasi"""
-    st.set_page_config(
-        page_title="AI UTBK Dashboard",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+def chart_radar(skor, bobot, jurusan):
+    cats  = [SUBTES_LABEL[k] for k in SUBTES] + [SUBTES_LABEL[SUBTES[0]]]
+    vals  = [skor[k] for k in SUBTES] + [skor[SUBTES[0]]]
+    ideal = [min(SKOR_MAX, SKOR_MAX*bobot[k]*6) for k in SUBTES] + [min(SKOR_MAX,SKOR_MAX*bobot[SUBTES[0]]*6)]
+    fig   = go.Figure()
+    fig.add_trace(go.Scatterpolar(r=ideal,theta=cats,fill='toself',name='Profil Ideal Jurusan',
+        fillcolor='rgba(227,160,8,.07)',line=dict(color='#e3a008',dash='dot',width=2)))
+    fig.add_trace(go.Scatterpolar(r=vals,theta=cats,fill='toself',name='Skor Kamu',
+        fillcolor='rgba(88,166,255,.15)',line=dict(color='#58a6ff',width=2.5)))
+    fig.update_layout(**CTHEME,polar=dict(
+        bgcolor='rgba(22,27,34,.8)',
+        radialaxis=dict(range=[0,SKOR_MAX],gridcolor='#30363d',linecolor='#30363d',
+                        tickfont=dict(size=9,color='#8b949e')),
+        angularaxis=dict(gridcolor='#30363d',linecolor='#30363d',tickfont=dict(size=10))),
+        legend=dict(bgcolor='rgba(0,0,0,0)',orientation='h',x=.5,xanchor='center',y=-.14),
+        title=dict(text=f"Radar Skor TPS — {jurusan}",font=dict(size=13)),height=380)
+    return fig
 
+def chart_bar_subtes(skor, bobot, info):
+    lbl   = [SUBTES_LABEL[k] for k in SUBTES]
+    vals  = [skor[k] for k in SUBTES]
+    tgt   = [min(SKOR_MAX,(info["min"]+info["max"])/2*bobot[k]*7) for k in SUBTES]
+    clrs  = [SUBTES_COLOR[k] for k in SUBTES]
+    fig   = go.Figure()
+    fig.add_trace(go.Bar(name='Skor Kamu',x=lbl,y=vals,marker_color=clrs,marker_line_width=0,
+        text=[f"{v}" for v in vals],textposition='outside',textfont=dict(size=10,color='#e6edf3')))
+    fig.add_trace(go.Scatter(name='Target Kampus',x=lbl,y=tgt,mode='markers+lines',
+        marker=dict(symbol='diamond',size=9,color='#e3a008'),
+        line=dict(color='#e3a008',dash='dot',width=1.5)))
+    fig.update_layout(**CTHEME,barmode='group',
+        xaxis=dict(tickfont=dict(size=9),gridcolor='#30363d',linecolor='#30363d'),
+        yaxis=dict(range=[0,SKOR_MAX*1.06],gridcolor='#21262d',linecolor='#30363d',tickfont=dict(size=9)),
+        legend=dict(bgcolor='rgba(0,0,0,0)',orientation='h',x=.5,xanchor='center',y=-.2),
+        title=dict(text="Skor Per Subtes vs Target Kampus",font=dict(size=13)),height=360)
+    return fig
 
-# ====================================== 
-# KONSTANTA DAN DATA
-# ====================================== 
+def chart_pipeline(skor, bobot, info, jurusan):
+    lbl   = [SUBTES_LABEL[k] for k in SUBTES]
+    aktual= [skor[k]*bobot[k] for k in SUBTES]
+    ideal = [info["min"]*bobot[k] for k in SUBTES]
+    clrs  = [SUBTES_COLOR[k] for k in SUBTES]
+    fig   = go.Figure()
+    fig.add_trace(go.Bar(name='Kontribusi Target Min',y=lbl,x=ideal,orientation='h',
+        marker_color=['rgba(227,160,8,.18)']*7,marker_line_color='#e3a008',marker_line_width=1.5))
+    fig.add_trace(go.Bar(name='Kontribusi Aktual',y=lbl,x=aktual,orientation='h',
+        marker_color=clrs,text=[f"{v:.1f}" for v in aktual],
+        textposition='inside',textfont=dict(size=10,color='#fff')))
+    fig.update_layout(**CTHEME,barmode='overlay',
+        xaxis=dict(title="Kontribusi ke Skor Total",gridcolor='#21262d',linecolor='#30363d',tickfont=dict(size=9)),
+        yaxis=dict(gridcolor='#30363d',linecolor='#30363d',tickfont=dict(size=10)),
+        legend=dict(bgcolor='rgba(0,0,0,0)',orientation='h',x=.5,xanchor='center',y=-.12),
+        title=dict(text=f"Pipeline Kontribusi Subtes — {jurusan}",font=dict(size=13)),height=370)
+    return fig
 
-DAFTAR_JURUSAN = [
-    "Kedokteran", "Kedokteran Gigi",
-    "Teknik Sipil", "Teknik Mesin", "Teknik Elektro",
-    "Teknik Industri", "Teknik Kimia", "Teknik Informatika",
-    "Matematika", "Fisika", "Kimia", "Biologi",
-    "Statistika", "Aktuaria",
-    "Farmasi", "Gizi", "Keperawatan", "Kesehatan Masyarakat",
-    "Ilmu Hukum",
-    "Ekonomi", "Manajemen", "Akuntansi", "Bisnis",
-    "Psikologi", "Ilmu Komunikasi", "Hubungan Internasional",
-    "Administrasi Publik",
-    "Sastra Inggris", "Pendidikan Bahasa Indonesia",
-    "Pendidikan Bahasa Inggris",
-    "Sosiologi", "Ilmu Politik", "Sejarah", "Geografi"
-]
+def chart_bobot(jurusan):
+    bobot = get_bobot(jurusan)
+    lbl   = [SUBTES_LABEL[k] for k in SUBTES]
+    vals  = [bobot[k]*100 for k in SUBTES]
+    clrs  = [SUBTES_COLOR[k] for k in SUBTES]
+    fig   = go.Figure(go.Bar(x=lbl,y=vals,marker_color=clrs,marker_line_width=0,
+        text=[f"{v:.0f}%" for v in vals],textposition='outside',textfont=dict(size=10,color='#e6edf3')))
+    fig.update_layout(**CTHEME,
+        xaxis=dict(tickfont=dict(size=9),gridcolor='#30363d'),
+        yaxis=dict(range=[0,55],ticksuffix="%",gridcolor='#21262d',title="Bobot (%)",tickfont=dict(size=9)),
+        title=dict(text=f"Bobot Subtes — {jurusan}",font=dict(size=13)),height=300)
+    return fig
 
-# Bobot untuk setiap kelompok jurusan
-BOBOT_JURUSAN = {
-    "kesehatan_utama": {
-        "jurusan": ["Kedokteran", "Kedokteran Gigi"],
-        "bobot": {"PU": 0.20, "PPU": 0.15, "PBM": 0.10, "PK": 0.15, "LBI": 0.10, "LBE": 0.10, "PM": 0.20}
-    },
-    "teknik": {
-        "jurusan": ["Teknik Sipil", "Teknik Mesin", "Teknik Elektro", "Teknik Industri", "Teknik Kimia", "Teknik Informatika"],
-        "bobot": {"PU": 0.20, "PPU": 0.10, "PBM": 0.05, "PK": 0.20, "LBI": 0.05, "LBE": 0.10, "PM": 0.30}
-    },
-    "saintek_murni": {
-        "jurusan": ["Matematika", "Fisika", "Kimia", "Biologi", "Statistika", "Aktuaria"],
-        "bobot": {"PU": 0.20, "PPU": 0.10, "PBM": 0.05, "PK": 0.20, "LBI": 0.05, "LBE": 0.05, "PM": 0.35}
-    },
-    "kesehatan_terapan": {
-        "jurusan": ["Farmasi", "Gizi", "Keperawatan", "Kesehatan Masyarakat"],
-        "bobot": {"PU": 0.20, "PPU": 0.15, "PBM": 0.10, "PK": 0.15, "LBI": 0.15, "LBE": 0.10, "PM": 0.15}
-    },
-    "hukum": {
-        "jurusan": ["Ilmu Hukum"],
-        "bobot": {"PU": 0.20, "PPU": 0.20, "PBM": 0.20, "PK": 0.05, "LBI": 0.20, "LBE": 0.10, "PM": 0.05}
-    },
-    "ekonomi_bisnis": {
-        "jurusan": ["Ekonomi", "Manajemen", "Akuntansi", "Bisnis"],
-        "bobot": {"PU": 0.20, "PPU": 0.15, "PBM": 0.10, "PK": 0.20, "LBI": 0.10, "LBE": 0.10, "PM": 0.15}
-    },
-    "psikologi": {
-        "jurusan": ["Psikologi"],
-        "bobot": {"PU": 0.20, "PPU": 0.15, "PBM": 0.20, "PK": 0.10, "LBI": 0.15, "LBE": 0.10, "PM": 0.10}
-    },
-    "komunikasi_hubungan": {
-        "jurusan": ["Ilmu Komunikasi", "Hubungan Internasional", "Administrasi Publik"],
-        "bobot": {"PU": 0.15, "PPU": 0.20, "PBM": 0.20, "PK": 0.05, "LBI": 0.20, "LBE": 0.15, "PM": 0.05}
-    },
-    "bahasa": {
-        "jurusan": ["Sastra Inggris", "Pendidikan Bahasa Indonesia", "Pendidikan Bahasa Inggris"],
-        "bobot": {"PU": 0.10, "PPU": 0.15, "PBM": 0.25, "PK": 0.05, "LBI": 0.25, "LBE": 0.15, "PM": 0.05}
-    },
-    "sosial_humaniora": {
-        "jurusan": ["Sosiologi", "Ilmu Politik", "Sejarah", "Geografi"],
-        "bobot": {"PU": 0.15, "PPU": 0.20, "PBM": 0.25, "PK": 0.05, "LBI": 0.20, "LBE": 0.10, "PM": 0.05}
-    },
-    "default": {
-        "jurusan": [],
-        "bobot": {"PU": 0.20, "PPU": 0.15, "PBM": 0.15, "PK": 0.10, "LBI": 0.15, "LBE": 0.10, "PM": 0.15}
-    }
-}
+def chart_klaster(sw):
+    klaster_info = [
+        ("Klaster 1\nTop Tier", 780, 880, "#f85149"),
+        ("Klaster 2\nMng Atas",  680, 790, "#d29922"),
+        ("Klaster 3\nMenengah",  600, 690, "#3fb950"),
+        ("Klaster 4\nRegional",  530, 630, "#58a6ff"),
+    ]
+    fig = go.Figure()
+    for lbl,mn,mx,clr in klaster_info:
+        rgba = f"rgba({int(clr[1:3],16)},{int(clr[3:5],16)},{int(clr[5:7],16)},0.2)"
+        fig.add_trace(go.Bar(x=[lbl],y=[mx-mn],base=[mn],name=lbl,
+            marker_color=rgba,marker_line_color=clr,marker_line_width=2,showlegend=False,
+            text=[f"{mn}–{mx}"],textposition='inside',textfont=dict(size=10,color=clr)))
+    fig.add_hline(y=sw,line_dash="dash",line_color="#bc8cff",line_width=2.5,
+        annotation_text=f"  Skor kamu: {sw:.0f}",annotation_font_color="#bc8cff")
+    fig.update_layout(**CTHEME,barmode='overlay',
+        xaxis=dict(gridcolor='#30363d',linecolor='#30363d',tickfont=dict(size=10)),
+        yaxis=dict(range=[400,SKOR_MAX],gridcolor='#21262d',linecolor='#30363d',
+                   title="Rentang Skor Aman",tickfont=dict(size=9)),
+        title=dict(text="Posisi Skor vs Klaster PTN",font=dict(size=13)),height=360)
+    return fig
 
-# Data PTN Favorit dengan Klasterisasi
-PTN_DATA = {
-    "klaster_1": {
-        "nama": "Klaster 1 - Top Tier",
-        "universitas": [
-            "Universitas Indonesia (UI)",
-            "Universitas Gadjah Mada (UGM)",
-            "Universitas Padjadjaran (Unpad)",
-            "Institut Teknologi Bandung (ITB)",
-            "Institut Pertanian Bogor (IPB)"
-        ],
-        "skor_aman": (640, 680),
-        "warna": "🔴",
-        "keterangan": "PTN dengan persaingan paling ketat dan standar tertinggi"
-    },
-    "klaster_2": {
-        "nama": "Klaster 2 - Menengah Atas",
-        "universitas": [
-            "Universitas Diponegoro (Undip)",
-            "Universitas Sebelas Maret (UNS)",
-            "Universitas Brawijaya (UB)",
-            "Universitas Airlangga (Unair)",
-            "Institut Teknologi Sepuluh Nopember (ITS)",
-            "Universitas Hasanuddin (Unhas)"
-        ],
-        "skor_aman": (580, 630),
-        "warna": "🟠",
-        "keterangan": "PTN favorit dengan standar tinggi"
-    },
-    "klaster_3": {
-        "nama": "Klaster 3 - Menengah",
-        "universitas": [
-            "Universitas Negeri Yogyakarta (UNY)",
-            "Universitas Negeri Semarang (UNNES)",
-            "Universitas Negeri Malang (UM)",
-            "Universitas Andalas (Unand)",
-            "Universitas Sumatera Utara (USU)"
-        ],
-        "skor_aman": (530, 570),
-        "warna": "🟡",
-        "keterangan": "PTN dengan standar menengah dan persaingan moderat"
-    },
-    "klaster_4": {
-        "nama": "Klaster 4 - PTN Regional",
-        "universitas": [
-            "Universitas Sriwijaya (Unsri)",
-            "Universitas Lampung (Unila)",
-            "Universitas Jember (Unej)",
-            "Universitas Riau (Unri)"
-        ],
-        "skor_aman": (480, 520),
-        "warna": "🟢",
-        "keterangan": "PTN di luar Jawa dan PTN baru dengan peluang lebih besar"
-    }
-}
-
-# Daftar semua PTN untuk selectbox (20 PTN)
-DAFTAR_PTN = [
-    "Universitas Indonesia (UI)",
-    "Universitas Gadjah Mada (UGM)",
-    "Universitas Padjadjaran (Unpad)",
-    "Institut Teknologi Bandung (ITB)",
-    "Institut Pertanian Bogor (IPB)",
-    "Universitas Diponegoro (Undip)",
-    "Universitas Sebelas Maret (UNS)",
-    "Universitas Brawijaya (UB)",
-    "Universitas Airlangga (Unair)",
-    "Institut Teknologi Sepuluh Nopember (ITS)",
-    "Universitas Hasanuddin (Unhas)",
-    "Universitas Negeri Yogyakarta (UNY)",
-    "Universitas Negeri Semarang (UNNES)",
-    "Universitas Negeri Malang (UM)",
-    "Universitas Andalas (Unand)",
-    "Universitas Sumatera Utara (USU)",
-    "Universitas Sriwijaya (Unsri)",
-    "Universitas Lampung (Unila)",
-    "Universitas Jember (Unej)",
-    "Universitas Riau (Unri)"
-]
+def chart_ptn_klaster(sw, klaster_no):
+    ptn_kl = {k:v for k,v in PTN_DATA.items() if v['klaster']==klaster_no}
+    fig=go.Figure()
+    for nm,d in ptn_kl.items():
+        short = nm.split("(")[0].strip()[:22]
+        clr   = "#58a6ff"
+        rgba  = "rgba(88,166,255,0.2)"
+        fig.add_trace(go.Bar(x=[short],y=[d['max']-d['min']],base=[d['min']],name=short,
+            marker_color=rgba,marker_line_color=clr,marker_line_width=1.5,showlegend=False,
+            text=[f"{d['min']}–{d['max']}"],textposition='inside',textfont=dict(size=9,color='#e6edf3')))
+    fig.add_hline(y=sw,line_dash="dash",line_color="#e3a008",line_width=2,
+        annotation_text=f"  Skor kamu: {sw:.0f}",annotation_font_color="#e3a008")
+    fig.update_layout(**CTHEME,barmode='overlay',
+        yaxis=dict(range=[400,SKOR_MAX],gridcolor='#21262d',title="Rentang Skor"),
+        xaxis=dict(gridcolor='#30363d',tickfont=dict(size=9)),
+        title=dict(text=f"PTN Klaster {klaster_no}",font=dict(size=13)),height=300)
+    return fig
 
 
-# ====================================== 
-# FUNGSI PERHITUNGAN AKADEMIK
-# ====================================== 
+# ══════════════════════════════════════════════════════════════
+# PDF EXPORT
+# ══════════════════════════════════════════════════════════════
+def generate_pdf_html(r):
+    now  = datetime.datetime.now().strftime("%d %B %Y, %H:%M")
+    nama = r.get("nama","—")
+    bobot_rows="".join(
+        f"<tr><td>{SUBTES_LABEL[k]}</td><td>{int(r['bobot'][k]*100)}%</td>"
+        f"<td>{r['skor'][k]}</td><td>{r['skor'][k]*r['bobot'][k]:.1f}</td></tr>" for k in SUBTES)
+    altj=", ".join(r['alternatif']) if r['alternatif'] else "—"
+    lgbm_txt=""
+    if r.get("lgbm_hasil") and r["lgbm_hasil"].get("sukses"):
+        h=r["lgbm_hasil"]
+        kpct=f"{h['kepercayaan']:.1f}%" if h.get('kepercayaan') else "—"
+        lgbm_txt=f"<p><strong>Rekomendasi Strategi AI (LGBM):</strong> {h['strategi']} (kepercayaan: {kpct})</p>"
 
-def get_bobot_jurusan(jurusan: str) -> Dict[str, float]:
-    """Mendapatkan bobot untuk jurusan tertentu"""
-    for kategori, data in BOBOT_JURUSAN.items():
-        if jurusan in data["jurusan"]:
-            return data["bobot"]
-    return BOBOT_JURUSAN["default"]["bobot"]
+    gc="green" if r['gap']>=0 else "red"
+    pc="green" if r['ppct']>=65 else "orange" if r['ppct']>=35 else "red"
+    return f"""<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
+<title>Laporan UTBK — {nama}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:Inter,sans-serif;font-size:11pt;color:#1e293b;background:#fff;padding:1.5cm 2cm}}
+h1{{font-size:20pt;font-weight:700;color:#0f172a;margin-bottom:4px}}
+h2{{font-size:12pt;font-weight:700;color:#0f172a;margin:16px 0 7px;border-bottom:2px solid #e3a008;padding-bottom:3px}}
+p{{font-size:10pt;line-height:1.6;color:#374151;margin-bottom:5px}}
+.hdr{{background:linear-gradient(135deg,#0f172a,#1e3a5f);color:#fff;padding:1.2cm 1.5cm;border-radius:10px;margin-bottom:1cm}}
+.hdr .sub{{color:#7dd3fc;font-size:9pt;margin-top:3px}}
+.kpi-row{{display:flex;gap:10px;margin-bottom:10px}}
+.kpi{{flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center}}
+.kpi .val{{font-size:20pt;font-weight:700}}.kpi .lbl{{font-size:8pt;color:#64748b;text-transform:uppercase;letter-spacing:.06em}}
+.green{{color:#16a34a}}.yellow{{color:#ca8a04}}.red{{color:#dc2626}}.blue{{color:#1d4ed8}}
+table{{width:100%;border-collapse:collapse;font-size:9.5pt;margin-bottom:9px}}
+th{{background:#f1f5f9;text-align:left;padding:5px 9px;font-weight:600;border:1px solid #e2e8f0}}
+td{{padding:5px 9px;border:1px solid #e2e8f0}}
+tr:nth-child(even) td{{background:#f8fafc}}
+.badge{{display:inline-block;padding:2px 9px;border-radius:99px;font-size:9pt;font-weight:700}}
+.bg{{background:#dcfce7;color:#166534}}.by{{background:#fef9c3;color:#854d0e}}.br{{background:#fee2e2;color:#991b1b}}
+.footer{{margin-top:1cm;font-size:8pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:7px}}
+@media print{{body{{padding:.8cm 1cm}}.no-print{{display:none}}}}
+</style></head><body>
+<div class="hdr"><h1>🎓 AI UTBK Readiness Report</h1><div class="sub">Laporan Kesiapan UTBK · {now}</div></div>
+<h2>👤 Profil Siswa</h2>
+<table><tr><th>Nama</th><td>{nama}</td><th>Jurusan Target</th><td>{r['jurusan']}</td></tr>
+<tr><th>Kampus Target</th><td>{r['kampus']}</td><th>Klaster</th><td>{r['info']['label']}</td></tr></table>
+<h2>📊 Ringkasan Hasil</h2>
+<div class="kpi-row">
+<div class="kpi"><div class="lbl">Skor Tertimbang</div><div class="val {gc}">{r['sw']:.0f}</div><div class="lbl">dari {SKOR_MAX}</div></div>
+<div class="kpi"><div class="lbl">Rata-rata Subtes</div><div class="val blue">{r['rata']:.0f}</div></div>
+<div class="kpi"><div class="lbl">Peluang Lolos</div><div class="val {pc}">{r['ppct']:.0f}%</div><div class="lbl">{r['pl']}</div></div>
+<div class="kpi"><div class="lbl">Gap vs Minimum</div><div class="val {gc}">{'+' if r['gap']>=0 else ''}{r['gap']:.0f}</div></div>
+</div>
+{lgbm_txt}
+<h2>📋 Bobot & Skor Subtes</h2>
+<table><tr><th>Subtes</th><th>Bobot ({r['jurusan']})</th><th>Skor (maks {SKOR_MAX})</th><th>Kontribusi</th></tr>
+{bobot_rows}
+<tr><th colspan="2">Total Skor Tertimbang</th><th colspan="2"><strong>{r['sw']:.1f}</strong></th></tr></table>
+<h2>🧠 Psikologis & Kebiasaan</h2>
+<table>
+<tr><th>Fokus</th><td>{r['fokus']}/5</td><th>Percaya Diri</th><td>{r['percaya_diri']}/5</td></tr>
+<tr><th>Kecemasan</th><td>{r['kecemasan']}/5</td><th>Distraksi</th><td>{r['distraksi']}/5</td></tr>
+<tr><th>Kesiapan Mental</th><td>{r['psiko']:.0f}/100</td><th>Konsistensi Belajar</th><td>{r['konsist']:.0f}/100</td></tr>
+<tr><th>Risiko Underperform</th><td colspan="3">{r['risk'][0]}</td></tr></table>
+<h2>🎓 Jurusan Alternatif (Formalitas)</h2><p>{altj}</p>
+<p style="font-size:9pt;color:#64748b;"><em>Alternatif disajikan sebagai formalitas. Fokus tetap pada jurusan target.</em></p>
+<div class="footer">AI UTBK Readiness Dashboard · Laporan ini bersifat estimasi berdasarkan data yang diinput</div>
+<div class="no-print" style="margin-top:18px;text-align:center;">
+<button onclick="window.print()" style="padding:9px 22px;background:#e3a008;border:none;
+  border-radius:8px;font-weight:700;cursor:pointer;font-size:11pt;">🖨️ Print / Save as PDF</button>
+</div></body></html>"""
 
 
-def hitung_skor_akademik(jurusan: str, PU: int, PPU: int, PBM: int, 
-                         PK: int, LBI: int, LBE: int, PM: int) -> float:
-    """
-    Menghitung skor akademik berdasarkan bobot jurusan
-    
-    Args:
-        jurusan: Nama jurusan target
-        PU, PPU, PBM, PK, LBI, LBE, PM: Skor masing-masing subtes
-        
-    Returns:
-        Skor akademik tertimbang
-    """
-    bobot = get_bobot_jurusan(jurusan)
-    
-    skor = (
-        bobot["PU"] * PU +
-        bobot["PPU"] * PPU +
-        bobot["PBM"] * PBM +
-        bobot["PK"] * PK +
-        bobot["LBI"] * LBI +
-        bobot["LBE"] * LBE +
-        bobot["PM"] * PM
-    )
-    
-    return skor
+# ══════════════════════════════════════════════════════════════
+# NAV BAR
+# ══════════════════════════════════════════════════════════════
+def render_nav():
+    p = st.session_state.page
+    s1 = "done" if p in ['survey','result'] else "active" if p=='home' else ""
+    s2 = "done" if p=='result' else "active" if p=='survey' else ""
+    s3 = "active" if p=='result' else ""
+    st.markdown(f"""<div class="nav">
+      <div class="nav-brand">🎓 AI UTBK</div>
+      <div class="nav-step {s1}">{'✓' if p in ['survey','result'] else '①'} Beranda</div>
+      <div class="nav-step {s2}">{'✓' if p=='result' else '②'} Input Data</div>
+      <div class="nav-step {s3}">③ Hasil Analisis</div>
+    </div>""", unsafe_allow_html=True)
 
 
-def hitung_skor_psikologis(fokus: int, percaya_diri: int, 
-                          kecemasan: int, distraksi: int) -> float:
-    """
-    Menghitung skor psikologis dari faktor mental
-    
-    Args:
-        fokus: Tingkat fokus (1-5)
-        percaya_diri: Tingkat percaya diri (1-5)
-        kecemasan: Tingkat kecemasan (1-5)
-        distraksi: Tingkat distraksi (1-5)
-        
-    Returns:
-        Skor psikologis (0-100)
-    """
-    skor = (
-        fokus * 1.2 + 
-        percaya_diri * 1.2 + 
-        (6 - kecemasan) + 
-        (6 - distraksi)
-    ) * 5
-    
-    return skor
+# ══════════════════════════════════════════════════════════════
+# PAGE: HOME
+# ══════════════════════════════════════════════════════════════
+def page_home():
+    st.markdown("""
+    <div class="hero">
+      <h1>Analisis Kesiapan<br><span>UTBK</span> Berbasis AI</h1>
+      <p>Dashboard cerdas berbasis LightGBM untuk memahami peluang, gap skor,<br>
+         dan strategi belajar yang dipersonalisasi sesuai profil akademik & psikologis kamu.</p>
+    </div>""", unsafe_allow_html=True)
 
+    c1,c2,c3,c4 = st.columns(4)
+    for col,(ico,ttl,desc) in zip([c1,c2,c3,c4],[
+        ("📡","Radar Chart TPS","Visualisasi 7 subtes vs profil ideal jurusan target"),
+        ("📊","Bar & Pipeline","Diagram batang skor + pipeline kontribusi per subtes"),
+        ("🎯","Gap Analysis","Selisih skor vs minimum kampus & klaster PTN"),
+        ("📄","Export PDF","Simpan laporan lengkap sebagai PDF"),
+    ]):
+        with col:
+            st.markdown(f"""<div class="card" style="text-align:center;padding:1.4rem">
+              <div style="font-size:2rem;margin-bottom:.5rem">{ico}</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.9rem;margin-bottom:.35rem">{ttl}</div>
+              <div style="font-size:.77rem;color:#8b949e;line-height:1.5">{desc}</div>
+            </div>""", unsafe_allow_html=True)
 
-def hitung_skor_kesiapan(skor_akademik: float, skor_psikologis: float, 
-                        skor_kebiasaan: float = 0) -> float:
-    """
-    Menghitung skor kesiapan total (gabungan akademik, psikologis, dan kebiasaan belajar)
-    
-    Args:
-        skor_akademik: Skor akademik tertimbang
-        skor_psikologis: Skor psikologis
-        skor_kebiasaan: Skor kebiasaan belajar (opsional)
-        
-    Returns:
-        Skor kesiapan total (0-100)
-    """
-    if skor_kebiasaan > 0:
-        # Dengan kebiasaan belajar: 50% akademik, 25% psikologis, 25% kebiasaan
-        return 0.5 * (skor_akademik / 10) + 0.25 * skor_psikologis + 0.25 * skor_kebiasaan
+    st.markdown('<div class="sec">🤖 Tentang AI UTBK Dashboard</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="al al-i">
+      <h4>Perkenalkan — Asisten AI UTBK</h4>
+      Dashboard ini mengintegrasikan <strong>Model LightGBM</strong> terlatih dengan pendekatan holistik:
+      <ul>
+        <li>📊 Analisis akademik tertimbang sesuai bobot jurusan target</li>
+        <li>🧠 Evaluasi psikologis: fokus, percaya diri, kecemasan, distraksi</li>
+        <li>📚 Analisis kebiasaan belajar & prediksi strategi optimal dari model AI</li>
+        <li>🎯 Gap analysis berbasis klaster PTN (skor skala 200–1000)</li>
+        <li>📡 Radar chart, bar chart, pipeline chart, dan tabel interaktif</li>
+      </ul>
+    </div>""", unsafe_allow_html=True)
+
+    if lgbm_model:
+        st.markdown(f'<div class="al al-s"><h4>✅ Model LGBM Aktif</h4>File: <code>{lgbm_fname}</code> — Prediksi strategi belajar siap digunakan.</div>',
+                    unsafe_allow_html=True)
     else:
-        # Tanpa kebiasaan belajar: 70% akademik, 30% psikologis
-        return 0.7 * (skor_akademik / 10) + 0.3 * skor_psikologis
+        st.markdown('<div class="al al-w"><h4>⚠️ Model LGBM Tidak Ditemukan</h4>Letakkan file <code>lgbm_model_2_.pkl</code> di folder yang sama. Kalkulasi manual akan digunakan.</div>',
+                    unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚀  Mulai Analisis Sekarang", type="primary"):
+        st.session_state.page='survey'; st.session_state.step=1; st.rerun()
 
 
-def hitung_peluang_lolos_lgbm(skor_akademik: float, kampus: str, 
-                               lgbm_peluang: float = None) -> Tuple[float, str, str]:
-    """
-    Menghitung peluang lolos dengan mempertimbangkan prediksi model LGBM.
-    Jika LGBM tersedia, hasilnya digabungkan dengan perhitungan manual (60% LGBM, 40% manual).
-    """
-    # Hitung manual terlebih dahulu
-    peluang_manual, _, _ = hitung_peluang_lolos(skor_akademik, kampus)
-    
-    if lgbm_peluang is not None:
-        # Gabungkan: 60% dari LGBM, 40% dari formula manual
-        peluang_final = 0.6 * lgbm_peluang + 0.4 * peluang_manual
-    else:
-        peluang_final = peluang_manual
-    
-    # Tentukan kategori
-    if peluang_final >= 0.75:
-        kategori = "Sangat Tinggi"
-        keterangan = f"Prediksi AI menunjukkan peluang sangat besar untuk diterima ({peluang_final*100:.0f}%)"
-    elif peluang_final >= 0.60:
-        kategori = "Tinggi"
-        keterangan = f"Prediksi AI menunjukkan peluang cukup besar untuk diterima ({peluang_final*100:.0f}%)"
-    elif peluang_final >= 0.40:
-        kategori = "Sedang"
-        keterangan = f"Prediksi AI menunjukkan peluang moderat, perlu peningkatan ({peluang_final*100:.0f}%)"
-    elif peluang_final >= 0.25:
-        kategori = "Rendah"
-        keterangan = f"Prediksi AI menunjukkan peluang masih rendah, tingkatkan persiapan ({peluang_final*100:.0f}%)"
-    else:
-        kategori = "Sangat Rendah"
-        keterangan = f"Prediksi AI menunjukkan peluang sangat kecil, butuh perbaikan signifikan ({peluang_final*100:.0f}%)"
-    
-    return peluang_final, kategori, keterangan
+# ══════════════════════════════════════════════════════════════
+# PAGE: SURVEY — 4 STEPS
+# ══════════════════════════════════════════════════════════════
+def step_bar(cur):
+    steps=["👤 Profil","📊 Skor TPS","🧠 Psikologis","📚 Kebiasaan"]
+    html='<div class="step-row">'
+    for i,s in enumerate(steps,1):
+        cls="active" if i==cur else "done" if i<cur else ""
+        mk="✓" if i<cur else str(i)
+        html+=f'<div class="step-item {cls}"><span class="step-num">{mk}</span>{s}</div>'
+    st.markdown(html+"</div>",unsafe_allow_html=True)
 
+def show_bobot_chips(jurusan):
+    bobot=get_bobot(jurusan)
+    chips="".join(
+        f'<div class="bobot-chip"><span class="sk">{k}</span><span class="bv">{int(bobot[k]*100)}%</span></div>'
+        for k in SUBTES)
+    st.markdown(f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:.5rem">{chips}</div>',unsafe_allow_html=True)
 
-def hitung_peluang_lolos(skor_akademik: float, kampus: str) -> Tuple[float, str, str]:
-    """
-    Menghitung peluang lolos MURNI dari skor TPS vs threshold kampus
-    
-    Args:
-        skor_akademik: Skor akademik tertimbang
-        kampus: Nama kampus target
-        
-    Returns:
-        Tuple (persentase_peluang, kategori, keterangan)
-    """
-    klaster = get_klaster_kampus(kampus)
-    skor_min = klaster["skor_min"]
-    skor_max = klaster["skor_max"]
-    
-    # Hitung peluang berdasarkan posisi skor
-    if skor_akademik >= skor_max:
-        peluang = 0.85
-        kategori = "Sangat Tinggi"
-        keterangan = f"Skor kamu ({skor_akademik:.0f}) berada di atas batas aman maksimum ({skor_max})"
-    elif skor_akademik >= skor_min:
-        # Linear interpolation antara min dan max
-        progress = (skor_akademik - skor_min) / (skor_max - skor_min)
-        peluang = 0.65 + (progress * 0.15)  # 65% - 80%
-        kategori = "Tinggi"
-        keterangan = f"Skor kamu ({skor_akademik:.0f}) berada dalam zona aman ({skor_min}-{skor_max})"
-    elif skor_akademik >= skor_min - 30:
-        # Zona kompetitif
-        gap = skor_min - skor_akademik
-        peluang = 0.40 + ((30 - gap) / 30 * 0.20)  # 40% - 60%
-        kategori = "Sedang"
-        keterangan = f"Skor kamu ({skor_akademik:.0f}) mendekati zona aman, butuh +{gap:.0f} poin"
-    elif skor_akademik >= skor_min - 60:
-        # Zona berisiko rendah
-        gap = skor_min - skor_akademik
-        peluang = 0.20 + ((60 - gap) / 30 * 0.15)  # 20% - 35%
-        kategori = "Rendah"
-        keterangan = f"Skor kamu ({skor_akademik:.0f}) masih {gap:.0f} poin di bawah zona aman"
-    else:
-        # Zona berisiko tinggi
-        gap = skor_min - skor_akademik
-        peluang = 0.15
-        kategori = "Sangat Rendah"
-        keterangan = f"Skor kamu ({skor_akademik:.0f}) masih {gap:.0f} poin di bawah zona aman"
-    
-    return peluang, kategori, keterangan
-
-
-def hitung_stabilitas_mental(fokus: int, percaya_diri: int, 
-                             kecemasan: int, distraksi: int) -> Tuple[float, str, str]:
-    """
-    Menghitung stabilitas mental (kemampuan perform konsisten saat ujian)
-    
-    Returns:
-        Tuple (skor_stabilitas, kategori, keterangan)
-    """
-    # Faktor positif
-    positif = (fokus * 1.5 + percaya_diri * 1.5) * 10
-    
-    # Faktor negatif
-    negatif = (kecemasan * 1.2 + distraksi * 1.2) * 8
-    
-    # Skor stabilitas (0-100)
-    stabilitas = max(0, min(100, positif - negatif + 50))
-    
-    if stabilitas >= 80:
-        kategori = "Sangat Stabil"
-        keterangan = "Mental kamu sangat siap menghadapi tekanan ujian"
-    elif stabilitas >= 65:
-        kategori = "Stabil"
-        keterangan = "Mental kamu cukup stabil, pertahankan kondisi ini"
-    elif stabilitas >= 50:
-        kategori = "Cukup Stabil"
-        keterangan = "Mental perlu penguatan untuk hasil maksimal"
-    else:
-        kategori = "Kurang Stabil"
-        keterangan = "Mental memerlukan perhatian serius untuk menghindari underperform"
-    
-    return stabilitas, kategori, keterangan
-
-
-def hitung_indeks_konsistensi(jam_belajar: int, hari_belajar: int, 
-                              latihan_soal: int, frekuensi_tryout: int, 
-                              review_soal: int) -> Tuple[float, str, str]:
-    """
-    Menghitung indeks konsistensi belajar (kemampuan maintain/improve skor)
-    
-    Returns:
-        Tuple (indeks_konsistensi, kategori, keterangan)
-    """
-    # Weighted scoring
-    skor = (
-        jam_belajar * 2.0 +      # Durasi belajar
-        hari_belajar * 2.2 +     # Konsistensi (paling penting)
-        latihan_soal * 1.8 +     # Practice
-        frekuensi_tryout * 1.5 + # Simulasi
-        review_soal * 1.5        # Evaluasi
-    ) * 2.0  # Normalisasi ke 0-100
-    
-    # Cap at 100
-    konsistensi = min(100, skor)
-    
-    if konsistensi >= 80:
-        kategori = "Sangat Konsisten"
-        keterangan = "Pola belajar kamu sangat mendukung peningkatan skor"
-    elif konsistensi >= 65:
-        kategori = "Konsisten"
-        keterangan = "Pola belajar sudah baik, tingkatkan untuk hasil optimal"
-    elif konsistensi >= 50:
-        kategori = "Cukup Konsisten"
-        keterangan = "Pola belajar perlu ditingkatkan untuk maintain skor"
-    else:
-        kategori = "Kurang Konsisten"
-        keterangan = "Pola belajar berisiko menyebabkan skor tidak stabil"
-    
-    return konsistensi, kategori, keterangan
-
-
-def hitung_risiko_underperform(stabilitas_mental: float, 
-                               konsistensi_belajar: float) -> Tuple[str, str, str]:
-    """
-    Menghitung risiko underperform saat ujian
-    
-    Returns:
-        Tuple (level_risiko, emoji, keterangan)
-    """
-    # Gabungan stabilitas mental dan konsistensi
-    skor_gabungan = (stabilitas_mental * 0.6 + konsistensi_belajar * 0.4)
-    
-    if skor_gabungan >= 75:
-        level = "Rendah"
-        emoji = "✅"
-        keterangan = "Kemungkinan besar kamu akan perform sesuai atau di atas kemampuan"
-    elif skor_gabungan >= 60:
-        level = "Sedang"
-        emoji = "⚠️"
-        keterangan = "Ada potensi fluktuasi performa, jaga konsistensi"
-    else:
-        level = "Tinggi"
-        emoji = "🔴"
-        keterangan = "Risiko tinggi perform di bawah kemampuan, perlu perbaikan mental & kebiasaan"
-    
-    return level, emoji, keterangan
-
-
-def hitung_risiko(fokus: int, percaya_diri: int, 
-                 kecemasan: int, distraksi: int) -> Tuple[float, str, str]:
-    """
-    Menghitung tingkat risiko performa
-    
-    Returns:
-        Tuple (nilai_risiko, level_risiko, keterangan)
-    """
-    risiko = (
-        kecemasan * 2 + 
-        distraksi * 2 + 
-        (6 - fokus) * 1.5 + 
-        (6 - percaya_diri) * 1.5
-    )
-    
-    if risiko >= 20:
-        level = "Tinggi"
-        keterangan = "sangat berpotensi menurunkan performa secara signifikan"
-    elif risiko >= 14:
-        level = "Menengah"
-        keterangan = "dapat menyebabkan fluktuasi hasil"
-    else:
-        level = "Rendah"
-        keterangan = "mendukung kestabilan performa"
-    
-    return risiko, level, keterangan
-
-
-def hitung_skor_kebiasaan_belajar(jam_belajar: int, hari_belajar: int, 
-                                   latihan_soal: int, frekuensi_tryout: int, 
-                                   review_soal: int) -> Tuple[float, str, str]:
-    """
-    Menghitung skor kebiasaan belajar dan memberikan evaluasi
-    
-    Args:
-        jam_belajar: Rata-rata jam belajar per hari (1-5)
-        hari_belajar: Hari belajar per minggu (1-5)
-        latihan_soal: Frekuensi latihan soal per minggu (1-5)
-        frekuensi_tryout: Frekuensi tryout per bulan (1-5)
-        review_soal: Frekuensi review soal per minggu (1-5)
-        
-    Returns:
-        Tuple (skor_total, kategori, keterangan)
-    """
-    # Bobot untuk setiap aspek
-    skor = (
-        jam_belajar * 2.0 +      # Jam belajar paling penting
-        hari_belajar * 1.8 +     # Konsistensi hari belajar
-        latihan_soal * 1.5 +     # Frekuensi latihan soal
-        frekuensi_tryout * 1.2 + # Tryout sebagai simulasi
-        review_soal * 1.5        # Review untuk perbaikan
-    ) * 2.5  # Normalisasi ke skala 0-100
-    
-    # Kategorisasi
-    if skor >= 75:
-        kategori = "Excellent"
-        keterangan = "Pola belajar kamu sudah sangat optimal dan disiplin"
-        emoji = "🌟"
-    elif skor >= 60:
-        kategori = "Baik"
-        keterangan = "Pola belajar kamu sudah cukup baik, tingkatkan konsistensi"
-        emoji = "✅"
-    elif skor >= 45:
-        kategori = "Cukup"
-        keterangan = "Pola belajar perlu ditingkatkan untuk hasil maksimal"
-        emoji = "⚠️"
-    else:
-        kategori = "Perlu Perbaikan"
-        keterangan = "Pola belajar perlu perhatian serius dan peningkatan signifikan"
-        emoji = "🔴"
-    
-    return skor, kategori, keterangan, emoji
-
-
-def klasifikasi_profil(fokus: int, percaya_diri: int, 
-                      kecemasan: int, distraksi: int) -> str:
-    """Mengklasifikasikan profil belajar siswa"""
-    if fokus >= 4 and percaya_diri >= 4 and kecemasan <= 2:
-        return "Stabil dan Percaya Diri"
-    elif kecemasan >= 4 and percaya_diri <= 3:
-        return "Cenderung Overthinking"
-    elif distraksi >= 4:
-        return "Potensial namun Kurang Konsisten"
-    elif fokus >= 3 and percaya_diri >= 3:
-        return "Sedang Berkembang"
-    else:
-        return "Perlu Penguatan Fundamental"
-
-
-def get_klaster_kampus(kampus: str) -> Dict:
-    """
-    Mendapatkan informasi klaster dari kampus yang dipilih
-    
-    Args:
-        kampus: Nama kampus yang dipilih
-        
-    Returns:
-        Dictionary berisi informasi klaster
-    """
-    for klaster_id, data in PTN_DATA.items():
-        if kampus in data["universitas"]:
-            return {
-                "id": klaster_id,
-                "nama": data["nama"],
-                "skor_min": data["skor_aman"][0],
-                "skor_max": data["skor_aman"][1],
-                "warna": data["warna"],
-                "keterangan": data["keterangan"]
-            }
-    
-    # Default jika tidak ditemukan
-    return {
-        "id": "klaster_3",
-        "nama": "Klaster 3 - Menengah",
-        "skor_min": 530,
-        "skor_max": 570,
-        "warna": "🟡",
-        "keterangan": "PTN dengan standar menengah"
-    }
-
-
-def analisis_peluang_kampus(skor_akademik: float, kampus: str) -> Dict:
-    """
-    Menganalisis peluang masuk ke kampus berdasarkan skor akademik
-    
-    Args:
-        skor_akademik: Skor akademik tertimbang
-        kampus: Nama kampus target
-        
-    Returns:
-        Dictionary berisi analisis peluang
-    """
-    klaster = get_klaster_kampus(kampus)
-    skor_min = klaster["skor_min"]
-    skor_max = klaster["skor_max"]
-    
-    # Hitung selisih skor
-    selisih_min = skor_akademik - skor_min
-    selisih_max = skor_akademik - skor_max
-    
-    # Tentukan kategori peluang
-    if skor_akademik >= skor_max:
-        kategori = "Sangat Aman"
-        warna_status = "success"
-        emoji = "🎯"
-        persentase = 85
-        keterangan = f"Skor kamu berada di atas ambang batas aman ({skor_max}). Peluang sangat besar!"
-    elif skor_akademik >= skor_min:
-        kategori = "Aman"
-        warna_status = "success"
-        emoji = "✅"
-        persentase = 70
-        keterangan = f"Skor kamu berada dalam rentang aman ({skor_min}-{skor_max}). Peluang cukup besar!"
-    elif skor_akademik >= skor_min - 30:
-        kategori = "Kompetitif"
-        warna_status = "warning"
-        emoji = "⚠️"
-        persentase = 50
-        keterangan = f"Skor kamu mendekati batas aman. Butuh {skor_min - skor_akademik:.0f} poin lagi untuk masuk zona aman."
-    else:
-        kategori = "Perlu Peningkatan"
-        warna_status = "error"
-        emoji = "🔴"
-        persentase = 30
-        keterangan = f"Skor kamu masih {skor_min - skor_akademik:.0f} poin di bawah batas aman. Tingkatkan persiapan secara intensif."
-    
-    return {
-        "kategori": kategori,
-        "warna_status": warna_status,
-        "emoji": emoji,
-        "persentase": persentase,
-        "keterangan": keterangan,
-        "selisih_min": selisih_min,
-        "selisih_max": selisih_max,
-        "klaster": klaster
-    }
-
-
-# ====================================== 
-# FUNGSI UI COMPONENTS
-# ====================================== 
-
-def render_header(nama: str = "", show_greeting: bool = False):
-    """Render header aplikasi dengan salam personal atau perkenalan umum"""
-    st.title("🎯 AI UTBK Readiness Dashboard")
-    
-    # Salam personal jika sudah klik prediksi dan nama sudah diisi
-    if show_greeting and nama:
-        import datetime
-        jam = datetime.datetime.now().hour
-        
-        if jam < 11:
-            salam = "Selamat pagi"
-        elif jam < 15:
-            salam = "Selamat siang"
-        elif jam < 18:
-            salam = "Selamat sore"
-        else:
-            salam = "Selamat malam"
-        
-        st.markdown(f"### {salam}, **{nama}**! 👋")
-        
-        st.info("""
-        🤖 **Perkenalkan, saya adalah Asisten AI UTBK**
-        
-        Saya hadir untuk membantu kamu menganalisis kesiapan menghadapi UTBK secara komprehensif. 
-        Dengan memanfaatkan teknologi kecerdasan buatan, saya akan:
-        
-        - 📊 Menganalisis performa akademik berdasarkan skor TPS kamu
-        - 🧠 Mengevaluasi kondisi psikologis dan kesiapan mental
-        - ⚠️ Mengidentifikasi potensi risiko yang dapat memengaruhi hasil ujian
-        - 🎯 Memberikan rekomendasi strategi belajar yang dipersonalisasi
-        - 🎓 Menyarankan pilihan jurusan berdasarkan kemampuan dan peluang
-        
-        Mari kita mulai perjalanan persiapan UTBK kamu dengan data-driven approach untuk hasil yang optimal!
-        """)
-    elif show_greeting and not nama:
-        # Jika sudah klik prediksi tapi nama belum diisi
-        st.info("""
-        🤖 **Perkenalkan, saya adalah Asisten AI UTBK**
-        
-        Saya hadir untuk membantu kamu menganalisis kesiapan menghadapi UTBK secara komprehensif. 
-        Dengan memanfaatkan teknologi kecerdasan buatan, saya akan:
-        
-        - 📊 Menganalisis performa akademik berdasarkan skor TPS kamu
-        - 🧠 Mengevaluasi kondisi psikologis dan kesiapan mental
-        - ⚠️ Mengidentifikasi potensi risiko yang dapat memengaruhi hasil ujian
-        - 🎯 Memberikan rekomendasi strategi belajar yang dipersonalisasi
-        - 🎓 Menyarankan pilihan jurusan berdasarkan kemampuan dan peluang
-        
-        Mari kita mulai perjalanan persiapan UTBK kamu dengan data-driven approach untuk hasil yang optimal!
-        """)
-    else:
-        # Tampilan awal sebelum klik prediksi
-        st.markdown("""
-        ### Selamat datang di AI UTBK Readiness Dashboard! 👋
-        """)
-        
-        st.info("""
-        🤖 **Perkenalkan, saya adalah Asisten AI UTBK**
-        
-        Saya adalah sistem kecerdasan buatan yang dirancang khusus untuk membantu siswa 
-        mempersiapkan diri menghadapi UTBK dengan pendekatan yang komprehensif dan personal.
-        
-        **Apa yang bisa saya lakukan untuk kamu?**
-        
-        📊 **Analisis Akademik Mendalam**  
-        Mengevaluasi performa kamu di semua subtes TPS dan memberikan penilaian tertimbang 
-        sesuai dengan jurusan yang kamu targetkan.
-        
-        🧠 **Evaluasi Psikologis**  
-        Mengukur kesiapan mental, tingkat fokus, kepercayaan diri, dan faktor-faktor 
-        psikologis lain yang mempengaruhi performa ujian.
-        
-        📚 **Analisis Kebiasaan Belajar**  
-        Menilai pola belajar kamu dan memberikan rekomendasi konkret untuk peningkatan 
-        yang terukur dan efektif.
-        
-        ⚠️ **Identifikasi Risiko**  
-        Mendeteksi potensi hambatan yang bisa mempengaruhi hasil ujian dan memberikan 
-        strategi mitigasi yang tepat.
-        
-        🎯 **Strategi Personal**  
-        Menyusun rencana belajar yang disesuaikan dengan profil unik kamu, lengkap dengan 
-        timeline dan target yang realistis.
-        
-        🎓 **Rekomendasi Jurusan**  
-        Memberikan saran pilihan jurusan alternatif berdasarkan analisis peluang dan 
-        kemampuan akademik kamu.
-        
-        ---
-        
-        **Cara Menggunakan:**
-        
-        1. 📝 Isi semua data di sidebar sebelah kiri (Profil, Skor TPS, Psikologi, Kebiasaan Belajar)
-        2. 🎯 Klik tombol **"CEK PREDIKSI SEKARANG"** di bagian bawah sidebar
-        3. 📊 Lihat hasil analisis lengkap dan rekomendasi personal untuk kamu
-        
-        Mari kita mulai perjalanan persiapan UTBK yang terstruktur dan berbasis data! 🚀
-        """)
-        
-        st.warning("⚠️ **Penting:** Pastikan semua data sudah diisi dengan lengkap dan jujur untuk mendapatkan hasil analisis yang akurat.")
-    
-    st.divider()
-
-
-def render_sidebar() -> Dict:
-    """
-    Render sidebar dan kumpulkan input dari user
-    
-    Returns:
-        Dictionary berisi semua input user
-    """
-    with st.sidebar:
-        st.header("🎓 Profil Siswa")
-        
-        nama = st.text_input("Nama")
-        jurusan = st.selectbox("Target Jurusan", DAFTAR_JURUSAN)
-        kampus = st.selectbox("Target Kampus (PTN)", DAFTAR_PTN)
-        
-        st.divider()
-        st.subheader("📊 Skor TPS")
-        
-        PU = st.slider("Penalaran Umum (PU)", 200, 900, 500)
-        PPU = st.slider("Pemahaman & Penulisan Umum (PPU)", 200, 900, 500)
-        PBM = st.slider("Pemahaman Bacaan & Menulis (PBM)", 200, 900, 500)
-        PK = st.slider("Pengetahuan Kuantitatif (PK)", 200, 900, 500)
-        LBI = st.slider("Literasi Bahasa Indonesia (LBI)", 200, 900, 500)
-        LBE = st.slider("Literasi Bahasa Inggris (LBE)", 200, 900, 500)
-        PM = st.slider("Penalaran Matematika (PM)", 200, 900, 500)
-        
-        st.divider()
-        st.subheader("🧠 Faktor Psikologi")
-        
-        fokus = st.slider("Tingkat Fokus", 1, 5, 3, help="1 = Sangat rendah, 5 = Sangat tinggi")
-        percaya_diri = st.slider("Percaya Diri", 1, 5, 3)
-        kecemasan = st.slider("Tingkat Kecemasan", 1, 5, 3, help="1 = Sangat rendah, 5 = Sangat tinggi")
-        distraksi = st.slider("Tingkat Distraksi", 1, 5, 3)
-        
-        st.divider()
-        st.subheader("📚 Kebiasaan Belajar")
-        
-        jam_belajar = st.selectbox("Rata-rata jam belajar/hari:", ["<1 jam", "1-2 jam", "3-4 jam", "5-6 jam", ">6 jam"])
-        map_jam = {"<1 jam": 1, "1-2 jam": 2, "3-4 jam": 3, "5-6 jam": 4, ">6 jam": 5}
-        Jam_Belajar = map_jam[jam_belajar]
-        
-        hari_belajar = st.selectbox("Hari belajar/minggu:", ["<=1", "2", "3", "4-5", ">=6"])
-        map_hari = {"<=1": 1, "2": 2, "3": 3, "4-5": 4, ">=6": 5}
-        Hari_Belajar = map_hari[hari_belajar]
-        
-        Latihan_Soal = st.slider("Frekuensi latihan soal/minggu:", 1, 5, 3)
-        
-        Frekuensi_Tryout = st.slider("Frekuensi tryout/bulan:", 1, 5, 2)
-        
-        review = st.selectbox("Frekuensi review soal/minggu:", ["<=1", "2", "3", "4-5", ">=6"])
-        Review_Soal = map_hari[review]
-        
-        st.divider()
-        
-        # Tombol Cek Prediksi
-        cek_prediksi = st.button("🎯 CEK PREDIKSI SEKARANG", type="primary", use_container_width=True)
-    
-    return {
-        "nama": nama,
-        "jurusan": jurusan,
-        "kampus": kampus,
-        "PU": PU, "PPU": PPU, "PBM": PBM, "PK": PK,
-        "LBI": LBI, "LBE": LBE, "PM": PM,
-        "fokus": fokus,
-        "percaya_diri": percaya_diri,
-        "kecemasan": kecemasan,
-        "distraksi": distraksi,
-        "jam_belajar": Jam_Belajar,
-        "hari_belajar": Hari_Belajar,
-        "latihan_soal": Latihan_Soal,
-        "frekuensi_tryout": Frekuensi_Tryout,
-        "review_soal": Review_Soal,
-        "cek_prediksi": cek_prediksi
-    }
-
-
-def render_metric_card(title: str, value: str, description: str, icon: str):
-    """Render kartu metrik"""
-    with st.container(border=True):
-        st.markdown(f"### {icon} {title}")
-        st.metric("", value)
-        st.caption(description)
-
-
-def render_dashboard(data: Dict):
-    """Render dashboard utama dengan 4 metrik terpisah"""
-    st.subheader("📊 Dashboard Utama")
-    
-    # Tampilkan rekomendasi strategi dari model LGBM
-    if data.get('lgbm_tersedia') and data.get('lgbm_hasil') and data['lgbm_hasil']['sukses']:
-        hasil = data['lgbm_hasil']
-        detail = hasil.get('detail', {})
-        icon = detail.get('icon', '🤖')
-        kepercayaan = f"{hasil['kepercayaan']:.1f}%" if hasil.get('kepercayaan') else ""
-        st.success(f"""
-        🤖 **Model AI LightGBM Aktif** — Rekomendasi Strategi Belajar:
-        
-        {icon} **{hasil['strategi']}** (Kepercayaan model: {kepercayaan})
-        
-        _{detail.get('deskripsi', '')}_
-        """)
-        if detail.get('tips'):
-            with st.expander("📋 Lihat Tips Strategi Belajar dari AI"):
-                for tip in detail['tips']:
-                    st.write(f"- {tip}")
-    elif data.get('lgbm_tersedia') and data.get('lgbm_hasil') and not data['lgbm_hasil']['sukses']:
-        st.warning(f"⚠️ Model LGBM gagal: {data['lgbm_hasil'].get('error', '')}. Menggunakan kalkulasi manual.")
-    else:
-        st.info("📊 Peluang lolos dihitung menggunakan kalkulasi skor TPS vs passing grade kampus.")
-    
-    # Info box untuk penjelasan metrik
-    st.info("""
-    💡 **Penjelasan Metrik:**
-    - **Peluang Lolos**: Kombinasi prediksi AI LightGBM + skor TPS vs passing grade kampus target
-    - **Stabilitas Mental**: Kemampuan kamu untuk perform konsisten di bawah tekanan
-    - **Konsistensi Belajar**: Seberapa baik pola belajar mendukung peningkatan skor
-    - **Risiko**: Potensi perform di bawah kemampuan saat ujian sebenarnya
-    """)
-    
+def survey_step1():
+    st.markdown('<div class="form-box">', unsafe_allow_html=True)
+    st.markdown('<h3>👤 Profil Siswa</h3>', unsafe_allow_html=True)
+    nama    = st.text_input("Nama Lengkap", value=st.session_state.data.get("nama",""), placeholder="Nama kamu...")
+    jurusan = st.selectbox("Target Jurusan", DAFTAR_JURUSAN,
+                           index=DAFTAR_JURUSAN.index(st.session_state.data.get("jurusan",DAFTAR_JURUSAN[0])))
+    kampus  = st.selectbox("Target Kampus (PTN)", DAFTAR_PTN,
+                           index=DAFTAR_PTN.index(st.session_state.data.get("kampus",DAFTAR_PTN[0])))
     st.markdown("---")
-    
-    # Row 1: Peluang & Stabilitas
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        with st.container(border=True):
-            st.markdown("### 🎯 Peluang Lolos PTN")
-            st.markdown(f"<h1 style='text-align: center; color: {'green' if data['peluang'] >= 0.65 else 'orange' if data['peluang'] >= 0.40 else 'red'};'>{data['peluang']*100:.0f}%</h1>", unsafe_allow_html=True)
-            st.markdown(f"**Kategori:** {data['peluang_kategori']}")
-            st.caption(f"📊 {data['peluang_keterangan']}")
-            st.caption("*Berdasarkan skor TPS tertimbang vs passing grade kampus*")
-    
-    with col2:
-        with st.container(border=True):
-            st.markdown("### 🧠 Stabilitas Mental")
-            st.markdown(f"<h1 style='text-align: center; color: {'green' if data['stabilitas'] >= 65 else 'orange' if data['stabilitas'] >= 50 else 'red'};'>{data['stabilitas']:.0f}%</h1>", unsafe_allow_html=True)
-            st.markdown(f"**Kategori:** {data['stabilitas_kategori']}")
-            st.caption(f"🧠 {data['stabilitas_keterangan']}")
-            st.caption("*Kemampuan perform konsisten saat ujian*")
-    
-    # Row 2: Konsistensi & Risiko
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        with st.container(border=True):
-            st.markdown("### 📚 Konsistensi Belajar")
-            st.markdown(f"<h1 style='text-align: center; color: {'green' if data['konsistensi'] >= 65 else 'orange' if data['konsistensi'] >= 50 else 'red'};'>{data['konsistensi']:.0f}%</h1>", unsafe_allow_html=True)
-            st.markdown(f"**Kategori:** {data['konsistensi_kategori']}")
-            st.caption(f"📖 {data['konsistensi_keterangan']}")
-            st.caption("*Pola belajar mendukung peningkatan skor*")
-    
-    with col4:
-        with st.container(border=True):
-            st.markdown("### ⚠️ Risiko Underperform")
-            st.markdown(f"<h1 style='text-align: center;'>{data['risiko_emoji']} {data['risiko_level']}</h1>", unsafe_allow_html=True)
-            st.caption(f"⚡ {data['risiko_keterangan']}")
-            st.caption("*Potensi perform di bawah kemampuan*")
-    
-    # Progress bar untuk skor akademik
-    st.markdown("---")
-    st.markdown("### 📊 Skor Akademik Tertimbang")
-    col_a, col_b = st.columns([3, 1])
-    with col_a:
-        st.progress(min(data['akademik'] / 900, 1.0))
-    with col_b:
-        st.metric("Skor", f"{data['akademik']:.0f}", delta="dari 900")
-    
-    st.caption(f"Skor ini sudah disesuaikan dengan bobot jurusan **{data['jurusan']}**")
-
-
-# ====================================== 
-# FUNGSI KONTEN TAB
-# ====================================== 
-
-def render_tab_peluang_kampus(data: Dict):
-    """Render tab analisis peluang kampus dengan alternatif lengkap"""
-    
-    # Sapaan personal
-    if data['nama']:
-        st.markdown(f"### Analisis Peluang {data['nama']} di {data['kampus']} 🎯")
-    else:
-        st.markdown(f"### Analisis Peluang Masuk {data['kampus']} 🎯")
-    
-    # Analisis peluang
-    peluang_kampus = analisis_peluang_kampus(data['akademik'], data['kampus'])
-    klaster = peluang_kampus['klaster']
-    
-    # Tampilkan info klaster
-    st.markdown(f"#### {klaster['warna']} {klaster['nama']}")
-    st.caption(klaster['keterangan'])
-    
-    st.divider()
-    
-    # Metrik utama
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric(
-            "Skor Akademik Kamu",
-            f"{data['akademik']:.0f}",
-            delta=f"{peluang_kampus['selisih_min']:+.0f} dari minimum"
-        )
-    
-    with col2:
-        st.metric(
-            "Rentang Skor Aman",
-            f"{klaster['skor_min']} - {klaster['skor_max']}",
-            delta=None
-        )
-    
-    with col3:
-        st.metric(
-            "Estimasi Peluang",
-            f"{peluang_kampus['persentase']}%",
-            delta=peluang_kampus['kategori']
-        )
-    
-    # Status peluang dengan warna
-    st.divider()
-    st.markdown("### 📊 Status Peluang & Rekomendasi")
-    
-    if peluang_kampus['warna_status'] == "success":
-        st.success(f"""
-        {peluang_kampus['emoji']} **Status: {peluang_kampus['kategori']}**
-        
-        {peluang_kampus['keterangan']}
-        
-        Dengan skor akademik **{data['akademik']:.0f}**, kamu memiliki peluang yang baik untuk diterima 
-        di jurusan **{data['jurusan']}** di **{data['kampus']}**.
-        
-        **✅ Rekomendasi Aksi:**
-        - ✓ Pertahankan performa akademik dengan konsistensi belajar
-        - ✓ Fokus pada penguatan mental dan manajemen stres saat ujian
-        - ✓ Lakukan tryout berkala (minimal 2x/bulan) untuk menjaga stabilitas
-        - ✓ Pelajari pola soal tahun-tahun sebelumnya
-        - ✓ Tetap siapkan pilihan kampus cadangan untuk strategi yang lebih aman
-        """)
-        
-    elif peluang_kampus['warna_status'] == "warning":
-        st.warning(f"""
-        {peluang_kampus['emoji']} **Status: {peluang_kampus['kategori']}**
-        
-        {peluang_kampus['keterangan']}
-        
-        Skor akademik kamu saat ini **{data['akademik']:.0f}**, yang berarti kamu berada di zona kompetitif.
-        Peluang masih ada, tetapi kamu perlu meningkatkan skor untuk masuk zona aman.
-        
-        **⚠️ Target Peningkatan:**
-        - 🎯 Butuh tambahan **{klaster['skor_min'] - data['akademik']:.0f} poin** untuk mencapai zona aman minimum
-        - 🎯 Butuh tambahan **{klaster['skor_max'] - data['akademik']:.0f} poin** untuk zona sangat aman
-        
-        **💪 Rekomendasi Aksi:**
-        - ✓ Intensifkan latihan soal di subtes dengan skor terendah
-        - ✓ Tingkatkan jam belajar efektif menjadi 4-5 jam/hari
-        - ✓ Ikuti tryout minimal 2-3x per bulan untuk tracking progres
-        - ✓ Fokus pada penguasaan konsep dasar yang sering keluar
-        - ✓ Evaluasi dan perbaiki kesalahan dari setiap tryout
-        """)
-        
-    else:
-        st.error(f"""
-        {peluang_kampus['emoji']} **Status: {peluang_kampus['kategori']}**
-        
-        {peluang_kampus['keterangan']}
-        
-        Skor akademik kamu saat ini **{data['akademik']:.0f}**, masih cukup jauh dari zona aman kampus ini.
-        
-        **🎯 Gap yang Harus Ditutup:**
-        - ⚠️ Butuh tambahan **{klaster['skor_min'] - data['akademik']:.0f} poin** untuk mencapai zona aman minimum
-        - ⚠️ Butuh tambahan **{klaster['skor_max'] - data['akademik']:.0f} poin** untuk zona sangat aman
-        
-        **🚨 Rekomendasi Penting:**
-        - ✓ Lakukan evaluasi menyeluruh pada SEMUA subtes
-        - ✓ Tingkatkan jam belajar menjadi 5-6 jam/hari dengan fokus tinggi
-        - ✓ Konsultasi dengan guru/mentor untuk strategi belajar intensif
-        - ✓ Ikuti bimbel atau kelas intensif jika memungkinkan
-        - ✓ Target peningkatan 50-100 poin dalam 3 bulan ke depan
-        """)
-    
-    # BAGIAN ALTERNATIF KAMPUS - PRIORITAS TINGGI
-    st.divider()
-    st.markdown("### 🎓 Rekomendasi Kampus: Strategi 3 Pilihan")
-    
-    st.info("""
-    💡 **Strategi Pemilihan Kampus yang Cerdas:**
-    
-    Berdasarkan skor akademik kamu, berikut adalah rekomendasi kampus dengan strategi **3 pilihan**:
-    - **Pilihan 1 (Ambisius):** Target kampus impian, meski sedikit di atas skor kamu
-    - **Pilihan 2 (Realistis):** Kampus yang sesuai dengan skor dan peluang tinggi
-    - **Pilihan 3 (Aman):** Safety net untuk memastikan kamu tetap lolos PTN
-    """)
-    
-    skor_akademik = data['akademik']
-    
-    # Kategorisasi kampus berdasarkan skor
-    kampus_sangat_aman = []
-    kampus_aman = []
-    kampus_kompetitif = []
-    kampus_berisiko = []
-    
-    for klaster_id, klaster_data in PTN_DATA.items():
-        skor_min = klaster_data["skor_aman"][0]
-        skor_max = klaster_data["skor_aman"][1]
-        
-        for univ in klaster_data["universitas"]:
-            status_data = {
-                "kampus": univ,
-                "klaster": klaster_data["nama"],
-                "skor_min": skor_min,
-                "skor_max": skor_max,
-                "warna": klaster_data["warna"],
-                "selisih": skor_akademik - skor_min
-            }
-            
-            if skor_akademik >= skor_max:
-                kampus_sangat_aman.append(status_data)
-            elif skor_akademik >= skor_min:
-                kampus_aman.append(status_data)
-            elif skor_akademik >= skor_min - 30:
-                kampus_kompetitif.append(status_data)
-            else:
-                kampus_berisiko.append(status_data)
-    
-    # Tampilkan rekomendasi berdasarkan kategori
-    
-    # 1. KAMPUS SANGAT AMAN
-    if kampus_sangat_aman:
-        st.success("### 🎯 Pilihan Sangat Aman (Peluang 80-90%)")
-        st.write("Kampus-kampus ini sangat direkomendasikan karena skor kamu **di atas batas aman**:")
-        
-        for i, k in enumerate(kampus_sangat_aman[:5], 1):  # Tampilkan max 5
-            with st.expander(f"{i}. {k['warna']} {k['kampus']} - **Skor Aman: {k['skor_min']}-{k['skor_max']}**"):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.write(f"**Klaster:** {k['klaster']}")
-                    st.write(f"**Skor Kamu:** {skor_akademik:.0f}")
-                    st.write(f"**Selisih dari Minimum:** +{k['selisih']:.0f} poin")
-                    st.success("✅ Peluang sangat besar! Skor kamu sudah melampaui batas aman.")
-                with col2:
-                    st.metric("Peluang", "85%", delta="Sangat Aman")
-                
-                st.write("**Rekomendasi:**")
-                st.write("- Gunakan sebagai pilihan utama atau pilihan 2 (realistis)")
-                st.write("- Fokus pada persiapan mental dan tryout berkala")
-                st.write("- Jaga konsistensi hingga hari H")
-    
-    # 2. KAMPUS AMAN
-    if kampus_aman:
-        st.success("### ✅ Pilihan Aman (Peluang 60-75%)")
-        st.write("Kampus-kampus ini berada **dalam zona aman** untuk skor kamu:")
-        
-        for i, k in enumerate(kampus_aman[:5], 1):
-            with st.expander(f"{i}. {k['warna']} {k['kampus']} - **Skor Aman: {k['skor_min']}-{k['skor_max']}**"):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.write(f"**Klaster:** {k['klaster']}")
-                    st.write(f"**Skor Kamu:** {skor_akademik:.0f}")
-                    st.write(f"**Selisih dari Minimum:** +{k['selisih']:.0f} poin")
-                    st.info("✅ Peluang besar! Skor kamu sudah masuk zona aman.")
-                with col2:
-                    st.metric("Peluang", "70%", delta="Aman")
-                
-                st.write("**Rekomendasi:**")
-                st.write("- Cocok sebagai pilihan 2 (realistis) atau pilihan 1 (ambisius)")
-                st.write("- Tingkatkan skor untuk masuk zona sangat aman")
-                st.write("- Latihan soal berkala untuk menjaga performa")
-    
-    # 3. KAMPUS KOMPETITIF
-    if kampus_kompetitif:
-        st.warning("### ⚠️ Pilihan Kompetitif (Peluang 40-55%)")
-        st.write("Kampus-kampus ini masih **bisa dijangkau** dengan peningkatan skor:")
-        
-        for i, k in enumerate(kampus_kompetitif[:5], 1):
-            gap = k['skor_min'] - skor_akademik
-            with st.expander(f"{i}. {k['warna']} {k['kampus']} - **Butuh +{gap:.0f} poin**"):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.write(f"**Klaster:** {k['klaster']}")
-                    st.write(f"**Skor Kamu:** {skor_akademik:.0f}")
-                    st.write(f"**Skor Minimum Aman:** {k['skor_min']}")
-                    st.write(f"**Gap:** {gap:.0f} poin")
-                    st.warning(f"⚠️ Butuh peningkatan {gap:.0f} poin untuk zona aman.")
-                with col2:
-                    st.metric("Peluang", "50%", delta="Kompetitif")
-                
-                st.write("**Rekomendasi:**")
-                st.write(f"- Bisa dijadikan pilihan 1 (ambisius) jika kamu yakin bisa meningkatkan {gap:.0f} poin")
-                st.write("- Intensifkan belajar 3 bulan terakhir sebelum UTBK")
-                st.write("- Fokus pada subtes dengan bobot tinggi untuk jurusan kamu")
-                st.write("- **Wajib** punya pilihan aman sebagai cadangan")
-    
-    # 4. KAMPUS BERISIKO (Hanya sebagai informasi)
-    if kampus_berisiko and len(kampus_sangat_aman) == 0 and len(kampus_aman) == 0:
-        st.error("### 🔴 Perhatian: Semua Kampus Berisiko Tinggi")
-        st.write("""
-        Berdasarkan skor saat ini, semua kampus masih berada di zona berisiko.
-        **Ini bukan akhir!** Dengan strategi yang tepat, kamu masih bisa meningkatkan peluang.
-        """)
-        
-        st.write("**📋 Kampus yang Paling Mungkin Dijangkau (dengan peningkatan skor):**")
-        
-        # Urutkan dari yang paling dekat
-        kampus_berisiko_sorted = sorted(kampus_berisiko, key=lambda x: x['skor_min'])[:5]
-        
-        for i, k in enumerate(kampus_berisiko_sorted, 1):
-            gap = k['skor_min'] - skor_akademik
-            with st.expander(f"{i}. {k['warna']} {k['kampus']} - **Target +{gap:.0f} poin**"):
-                st.write(f"**Klaster:** {k['klaster']}")
-                st.write(f"**Skor Kamu Sekarang:** {skor_akademik:.0f}")
-                st.write(f"**Skor Target Minimum:** {k['skor_min']}")
-                st.write(f"**Peningkatan Dibutuhkan:** {gap:.0f} poin")
-                
-                # Estimasi waktu
-                if gap <= 50:
-                    waktu = "2-3 bulan"
-                    tingkat = "Realistis"
-                elif gap <= 100:
-                    waktu = "3-5 bulan"
-                    tingkat = "Menantang tapi Mungkin"
-                else:
-                    waktu = "5-6 bulan"
-                    tingkat = "Sangat Menantang"
-                
-                st.info(f"**Estimasi Waktu:** {waktu} dengan belajar intensif ({tingkat})")
-                
-                st.write("**🎯 Roadmap Peningkatan:**")
-                st.write(f"- **Target per bulan:** +{gap/3:.0f} poin")
-                st.write(f"- **Target per minggu:** +{gap/12:.0f} poin")
-                st.write("- Fokus pada subtes dengan bobot tinggi")
-                st.write("- Tryout seminggu sekali untuk tracking")
-                st.write("- Evaluasi dan perbaiki setiap kesalahan")
-    
-    # Ringkasan Rekomendasi Akhir
-    st.divider()
-    st.markdown("### 🎯 Kesimpulan & Rekomendasi Strategi Pemilihan")
-    
-    if kampus_sangat_aman or kampus_aman:
-        # Tentukan label pilihan dengan aman (hindari IndexError)
-        semua_aman = kampus_sangat_aman + kampus_aman
-        
-        pilihan1_label = data['kampus']
-        if kampus_kompetitif:
-            pilihan1_label += f" atau kampus dari {kampus_kompetitif[0]['klaster']}"
-        elif kampus_aman:
-            pilihan1_label += f" atau kampus dari {kampus_aman[0]['klaster']}"
-        elif kampus_sangat_aman:
-            pilihan1_label += f" atau kampus dari {kampus_sangat_aman[0]['klaster']}"
-        
-        if kampus_aman:
-            pilihan2_label = kampus_aman[0]['kampus']
-        elif kampus_sangat_aman:
-            pilihan2_label = kampus_sangat_aman[0]['kampus']
+    st.markdown(f"**📋 Bobot Subtes untuk Jurusan {jurusan}:**")
+    show_bobot_chips(jurusan)
+    info = ptn_info(kampus)
+    st.markdown(f"""<div class="al al-i" style="margin-top:.8rem">
+      <h4>{info['label']} — {kampus}</h4>
+      Rentang skor aman: <strong>{info['min']} – {info['max']}</strong> (skala 1000)
+    </div>""", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    if st.button("Lanjut → Skor TPS", type="primary"):
+        if not nama.strip():
+            st.error("Nama harus diisi!")
         else:
-            pilihan2_label = "Kampus zona aman terdekat"
-        
-        if kampus_sangat_aman:
-            pilihan3_label = kampus_sangat_aman[0]['kampus']
-        elif len(kampus_aman) > 1:
-            pilihan3_label = kampus_aman[-1]['kampus']
-        elif kampus_aman:
-            pilihan3_label = kampus_aman[0]['kampus']
-        else:
-            pilihan3_label = "Kampus dari klaster lebih rendah"
+            st.session_state.data.update({"nama":nama,"jurusan":jurusan,"kampus":kampus})
+            st.session_state.step=2; st.rerun()
 
-        st.success(f"""
-        **✅ Kabar Baik!** Kamu memiliki **{len(kampus_sangat_aman) + len(kampus_aman)} kampus** 
-        dalam zona aman dengan skor saat ini.
-        
-        **Strategi Pemilihan yang Disarankan:**
-        
-        📌 **Pilihan 1 (Ambisius):** {pilihan1_label}  
-        → Kampus target impian, meski sedikit menantang
-        
-        📌 **Pilihan 2 (Realistis):** {pilihan2_label}  
-        → Peluang tinggi dengan skor saat ini
-        
-        📌 **Pilihan 3 (Aman):** {pilihan3_label}  
-        → Safety net untuk memastikan lolos PTN
-        
-        **💡 Tips:** Gunakan strategi ini untuk memaksimalkan peluang sambil tetap punya opsi aman!
-        """)
-    elif kampus_kompetitif:
-        st.warning(f"""
-        **⚠️ Zona Kompetitif** - Kamu memiliki **{len(kampus_kompetitif)} kampus** yang masih bisa dijangkau.
-        
-        **Strategi Pemilihan yang Disarankan:**
-        
-        📌 **Pilihan 1 (Ambisius):** {kampus_kompetitif[0]['kampus']}  
-        → Target peningkatan {kampus_kompetitif[0]['skor_min'] - skor_akademik:.0f} poin dalam 2-3 bulan
-        
-        📌 **Pilihan 2 (Realistis):** {kampus_kompetitif[-1]['kampus'] if len(kampus_kompetitif) > 1 else 'Kampus dari klaster lebih rendah'}  
-        → Gap lebih kecil, lebih mudah dicapai
-        
-        📌 **Pilihan 3 (Aman):** Pilih dari **Klaster 4** (PTN Regional)  
-        → Pastikan minimal 1 pilihan di zona aman
-        
-        **🚨 Penting:** Dengan peningkatan skor yang konsisten, peluang kamu akan naik signifikan!
-        """)
+def survey_step2():
+    st.markdown('<div class="form-box">', unsafe_allow_html=True)
+    st.markdown('<h3>📊 Skor TPS (Tes Potensi Skolastik)</h3>', unsafe_allow_html=True)
+    st.caption(f"Skala skor: {SKOR_MIN} – {SKOR_MAX} · Masukkan skor tryout terbaru per subtes")
+    skor={}
+    pairs=[("PU","PPU"),("PBM","PK"),("LBI","LBE"),("PM",None)]
+    for pair in pairs:
+        cols=st.columns(2)
+        for col,k in zip(cols,pair):
+            if k is None: continue
+            with col:
+                skor[k]=st.slider(f"{SUBTES_LABEL[k]} ({k})",SKOR_MIN,SKOR_MAX,
+                                  st.session_state.data.get(k,500),step=5,key=f"sl_{k}")
+    jurusan=st.session_state.data.get("jurusan",DAFTAR_JURUSAN[0])
+    bobot=get_bobot(jurusan)
+    st.plotly_chart(chart_radar(skor,bobot,jurusan),use_container_width=True,config={"displayModeBar":False})
+    st.markdown('</div>', unsafe_allow_html=True)
+    cb,cn=st.columns([1,5])
+    with cb:
+        if st.button("← Kembali"): st.session_state.step=1; st.rerun()
+    with cn:
+        if st.button("Lanjut → Psikologis",type="primary"):
+            st.session_state.data.update(skor); st.session_state.step=3; st.rerun()
+
+def survey_step3():
+    st.markdown('<div class="form-box">', unsafe_allow_html=True)
+    st.markdown('<h3>🧠 Kondisi Psikologis</h3>', unsafe_allow_html=True)
+    st.caption("1 = Sangat Rendah · 5 = Sangat Tinggi")
+    c1,c2=st.columns(2)
+    with c1:
+        fokus=st.slider("🎯 Kemampuan Fokus Belajar",1,5,st.session_state.data.get("fokus",3))
+        percaya_diri=st.slider("💪 Percaya Diri",1,5,st.session_state.data.get("percaya_diri",3))
+    with c2:
+        kecemasan=st.slider("😰 Tingkat Kecemasan (1=tenang, 5=sangat cemas)",1,5,st.session_state.data.get("kecemasan",3))
+        distraksi=st.slider("📱 Mudah Terdistraksi (1=fokus, 5=sangat mudah)",1,5,st.session_state.data.get("distraksi",3))
+    psiko=(fokus*1.5+percaya_diri*1.5+(6-kecemasan)+(6-distraksi))/20*100
+    pc="c-green" if psiko>=65 else "c-gold" if psiko>=45 else "c-red"
+    st.markdown(f"""<div class="card" style="text-align:center;margin-top:.8rem">
+      <div class="kpi-lbl">Indeks Kesiapan Mental</div>
+      <div class="kpi-val {pc}">{psiko:.0f}<span style="font-size:1rem">/100</span></div>
+    </div>""", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    cb,cn=st.columns([1,5])
+    with cb:
+        if st.button("← Kembali"): st.session_state.step=2; st.rerun()
+    with cn:
+        if st.button("Lanjut → Kebiasaan Belajar",type="primary"):
+            st.session_state.data.update({"fokus":fokus,"percaya_diri":percaya_diri,"kecemasan":kecemasan,"distraksi":distraksi})
+            st.session_state.step=4; st.rerun()
+
+def survey_step4():
+    st.markdown('<div class="form-box">', unsafe_allow_html=True)
+    st.markdown('<h3>📚 Kebiasaan Belajar</h3>', unsafe_allow_html=True)
+    map_jam={"< 1 jam":1,"1–2 jam":2,"3–4 jam":3,"5–6 jam":4,"> 6 jam":5}
+    map_hari={"≤ 1 hari":1,"2 hari":2,"3 hari":3,"4–5 hari":4,"≥ 6 hari":5}
+    c1,c2=st.columns(2)
+    with c1:
+        jam_str=st.selectbox("⏰ Jam belajar/hari",list(map_jam.keys()),
+                             index=st.session_state.data.get("jam_belajar",3)-1)
+        hari_str=st.selectbox("📅 Hari belajar/minggu",list(map_hari.keys()),
+                              index=st.session_state.data.get("hari_belajar",3)-1)
+        latihan=st.slider("✏️ Frekuensi latihan soal/minggu (1–5)",1,5,st.session_state.data.get("latihan_soal",3))
+    with c2:
+        tryout=st.slider("📝 Frekuensi tryout/bulan (1–5)",1,5,st.session_state.data.get("frekuensi_tryout",2))
+        review=st.slider("🔄 Frekuensi review soal salah (1–5)",1,5,st.session_state.data.get("review_soal",3))
+    jb=map_jam[jam_str]; hb=map_hari[hari_str]
+    konsist=min(100,(jb*2+hb*2.2+latihan*1.8+tryout*1.5+review*1.5)*2)
+    kc="c-green" if konsist>=65 else "c-gold" if konsist>=45 else "c-red"
+    st.markdown(f"""<div class="card" style="text-align:center;margin-top:.8rem">
+      <div class="kpi-lbl">Indeks Konsistensi Belajar</div>
+      <div class="kpi-val {kc}">{konsist:.0f}<span style="font-size:1rem">/100</span></div>
+    </div>""", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    cb,cn=st.columns([1,5])
+    with cb:
+        if st.button("← Kembali"): st.session_state.step=3; st.rerun()
+    with cn:
+        if st.button("🎯  Lihat Hasil Analisis",type="primary"):
+            st.session_state.data.update({"jam_belajar":jb,"hari_belajar":hb,
+                "latihan_soal":latihan,"frekuensi_tryout":tryout,"review_soal":review})
+            st.session_state.result=hitung_semua(st.session_state.data)
+            st.session_state.page='result'; st.rerun()
+
+def page_survey():
+    step_bar(st.session_state.step)
+    {1:survey_step1,2:survey_step2,3:survey_step3,4:survey_step4}[st.session_state.step]()
+
+
+# ══════════════════════════════════════════════════════════════
+# PAGE: RESULT
+# ══════════════════════════════════════════════════════════════
+def prog_bar(label,val,color):
+    st.markdown(f"""<div class="prog-wrap">
+      <div class="prog-lbl"><span>{label}</span><span>{val:.0f}/100</span></div>
+      <div class="prog-bg"><div class="prog-fill" style="width:{val:.0f}%;background:{color}"></div></div>
+    </div>""", unsafe_allow_html=True)
+
+def page_result():
+    r=st.session_state.result
+    if not r:
+        st.session_state.page='home'; st.rerun()
+
+    nama=r.get("nama","Pejuang UTBK")
+    jam=datetime.datetime.now().hour
+    salam="Selamat pagi" if jam<11 else "Selamat siang" if jam<15 else "Selamat sore" if jam<18 else "Selamat malam"
+
+    st.markdown(f"""<div class="hero" style="padding:2rem 2.5rem">
+      <h1 style="font-size:1.7rem!important">{salam}, <span>{nama}!</span> 👋</h1>
+      <p>Hasil analisis kesiapan UTBK untuk jurusan <strong style="color:#e3a008">{r['jurusan']}</strong>
+         di <strong style="color:#58a6ff">{r['kampus']}</strong></p>
+    </div>""", unsafe_allow_html=True)
+
+    # ── KPI ──
+    kc="c-green" if r['pl'] in ("Sangat Aman","Aman") else "c-gold" if r['pl']=="Kompetitif" else "c-red"
+    gc="c-green" if r['gap']>=0 else "c-red"
+    pc="c-green" if r['ppct']>=65 else "c-gold" if r['ppct']>=35 else "c-red"
+    rc="c-green" if r['risk'][0]=="Rendah" else "c-gold" if r['risk'][0]=="Sedang" else "c-red"
+    k1,k2,k3,k4,k5=st.columns(5)
+    for col,lbl,val,cls,sub in [
+        (k1,"Skor Tertimbang",f"{r['sw']:.0f}",kc,f"dari {SKOR_MAX}"),
+        (k2,"Rata-rata Subtes",f"{r['rata']:.0f}","c-blue","7 subtes"),
+        (k3,"Peluang Lolos",f"{r['ppct']:.0f}%",pc,r['pl']),
+        (k4,"Gap vs Minimum",f"{'+' if r['gap']>=0 else ''}{r['gap']:.0f}",gc,f"Min {r['info']['min']}"),
+        (k5,"Risiko Underperform",r['risk'][0],rc,r['risk'][1]),
+    ]:
+        with col:
+            st.markdown(f"""<div class="card">
+              <div class="kpi-lbl">{lbl}</div>
+              <div class="kpi-val {cls}">{val}</div>
+              <div class="kpi-sub">{sub}</div>
+            </div>""", unsafe_allow_html=True)
+
+    # ── LGBM Banner ──
+    st.markdown("<br>", unsafe_allow_html=True)
+    if r.get("lgbm_hasil") and r["lgbm_hasil"].get("sukses"):
+        h=r["lgbm_hasil"]; d=h.get("detail",{})
+        kpct=f"{h['kepercayaan']:.1f}%" if h.get("kepercayaan") else ""
+        tips="".join(f"<li>{t}</li>" for t in d.get("tips",[]))
+        st.markdown(f"""<div class="al al-s">
+          <h4>🤖 Rekomendasi Strategi AI (LightGBM) — {d.get('icon','')} {h['strategi']} &nbsp;
+            <span style="font-size:.8rem;font-weight:400;color:#8b949e">Kepercayaan: {kpct}</span></h4>
+          <em>{d.get('deskripsi','')}</em>
+          <ul style="margin-top:.4rem">{tips}</ul>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Status Banner ──
+    if r['pl']=="Sangat Aman":
+        st.markdown(f"""<div class="al al-s"><h4>🎯 Status: SANGAT AMAN</h4>
+          Skor tertimbang <strong>{r['sw']:.0f}</strong> melampaui batas maksimum aman {r['info']['max']}.
+          Fokus: pertahankan performa & jaga kondisi mental menjelang hari H.</div>""", unsafe_allow_html=True)
+    elif r['pl']=="Aman":
+        st.markdown(f"""<div class="al al-s"><h4>✅ Status: AMAN</h4>
+          Skor {r['sw']:.0f} dalam zona aman ({r['info']['min']}–{r['info']['max']}).
+          Tingkatkan <strong>{r['info']['max']-r['sw']:.0f} poin</strong> lagi untuk zona sangat aman.</div>""", unsafe_allow_html=True)
+    elif r['pl']=="Kompetitif":
+        st.markdown(f"""<div class="al al-w"><h4>⚡ Status: KOMPETITIF</h4>
+          Butuh <strong>+{r['info']['min']-r['sw']:.0f} poin</strong> untuk zona aman.
+          Intensifkan latihan pada subtes berbobot tinggi.</div>""", unsafe_allow_html=True)
     else:
-        # Pastikan kampus_berisiko_sorted tersedia
-        kampus_berisiko_sorted = sorted(kampus_berisiko, key=lambda x: x['skor_min']) if kampus_berisiko else []
-        
-        if not kampus_berisiko_sorted:
-            st.error("**🔴 Data kampus tidak tersedia.** Silakan coba lagi.")
-        else:
-            pilihan1 = kampus_berisiko_sorted[0]['kampus']
-            pilihan2 = kampus_berisiko_sorted[1]['kampus'] if len(kampus_berisiko_sorted) > 1 else 'Kampus klaster 4'
-            pilihan3 = kampus_berisiko_sorted[2]['kampus'] if len(kampus_berisiko_sorted) > 2 else 'Kampus klaster 4'
-            gap_min  = kampus_berisiko_sorted[0]['skor_min'] - skor_akademik
-            skor_target = kampus_berisiko_sorted[0]['skor_min']
+        st.markdown(f"""<div class="al al-d"><h4>🔴 Status: PERLU PENINGKATAN</h4>
+          Gap <strong>{abs(r['gap']):.0f} poin</strong> dari minimum. Pertimbangkan bimbingan intensif.</div>""", unsafe_allow_html=True)
 
-            st.error(f"""
-        **🔴 Perhatian Serius Diperlukan** - Skor saat ini masih di bawah zona aman semua kampus.
-        
-        **Strategi Pemilihan & Peningkatan:**
-        
-        🎯 **Target Jangka Pendek (1-2 bulan):**
-        - Tingkatkan skor minimal +{gap_min:.0f} poin
-        - Fokus pada {pilihan1} sebagai target terdekat
-        
-        🎯 **Target Jangka Menengah (3-4 bulan):**
-        - Capai skor {skor_target} untuk masuk zona aman Klaster 4
-        - Belajar intensif 5-6 jam/hari
-        
-        📌 **Rekomendasi Pilihan Sementara:**
-        1. **Pilihan 1:** {pilihan1} (target terdekat)
-        2. **Pilihan 2:** {pilihan2}
-        3. **Pilihan 3:** {pilihan3}
-        
-        **💪 Motivasi:** Gap masih bisa ditutup! Fokus, konsisten, dan evaluasi rutin adalah kuncinya.
-        """)
-    
-    # Tabel perbandingan semua klaster
+    # ── TABS ──
+    t1,t2,t3,t4,t5,t6=st.tabs([
+        "📡 Radar & Skor TPS",
+        "📊 Analisis Kampus",
+        "🔀 Pipeline & Bobot",
+        "🎓 Jurusan & Alternatif",
+        "🚀 Strategi Belajar",
+        "📄 Export PDF",
+    ])
+
+    # ═══ TAB 1: RADAR + BAR ═══
+    with t1:
+        st.markdown('<div class="sec">📡 Radar Profil TPS vs Profil Ideal Jurusan</div>', unsafe_allow_html=True)
+        st.plotly_chart(chart_radar(r['skor'],r['bobot'],r['jurusan']),use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown('<div class="sec">📊 Bar Chart Skor Per Subtes vs Target Kampus</div>', unsafe_allow_html=True)
+        st.plotly_chart(chart_bar_subtes(r['skor'],r['bobot'],r['info']),use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown('<div class="sec">📋 Tabel Detail Skor Per Subtes</div>', unsafe_allow_html=True)
+        df_sub=pd.DataFrame([{
+            "Subtes":SUBTES_LABEL[k],
+            "Bobot":f"{r['bobot'][k]*100:.0f}%",
+            "Skor Kamu":r['skor'][k],
+            "Kontribusi":f"{r['skor'][k]*r['bobot'][k]:.1f}",
+            "Target Kampus":f"{(r['info']['min']+r['info']['max'])/2*r['bobot'][k]*7:.0f}",
+            "Gap":f"{r['skor'][k]-(r['info']['min']+r['info']['max'])/2*r['bobot'][k]*7:+.0f}",
+            "Status":"✅ Kuat" if r['skor'][k]>=650 else "⚡ Sedang" if r['skor'][k]>=450 else "🔴 Lemah",
+        } for k in SUBTES])
+        st.dataframe(df_sub,use_container_width=True,hide_index=True)
+
+    # ═══ TAB 2: ANALISIS KAMPUS ═══
+    with t2:
+        st.markdown('<div class="sec">📊 Posisi Skor vs Klaster PTN</div>', unsafe_allow_html=True)
+        st.plotly_chart(chart_klaster(r['sw']),use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown(f'<div class="sec">🏛️ PTN Klaster {r["info"]["klaster"]} — Perbandingan</div>', unsafe_allow_html=True)
+        st.plotly_chart(chart_ptn_klaster(r['sw'],r['info']['klaster']),use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown('<div class="sec">📋 Tabel Perbandingan Semua Klaster</div>', unsafe_allow_html=True)
+        kl_data=[(1,780,880,"⭐ Klaster 1 — Top Tier"),(2,680,790,"🔷 Klaster 2 — Mng Atas"),
+                 (3,600,690,"🔹 Klaster 3 — Menengah"),(4,530,630,"🔸 Klaster 4 — Regional")]
+        rows=[]
+        for kno,mn,mx,kname in kl_data:
+            g=r['sw']-mn
+            if r['sw']>=mx: st_kl,p_kl="🎯 Sangat Aman","~85%"
+            elif r['sw']>=mn: st_kl,p_kl="✅ Aman","~70%"
+            elif r['sw']>=mn-60: st_kl,p_kl="⚡ Kompetitif","~40%"
+            else: st_kl,p_kl="🔴 Berisiko","~15%"
+            rows.append({"Klaster":kname,"Rentang Skor":f"{mn}–{mx}",
+                         "Skor Kamu":f"{r['sw']:.0f}","Gap":f"{g:+.0f}",
+                         "Status":st_kl,"Est. Peluang":p_kl})
+        st.dataframe(pd.DataFrame(rows),use_container_width=True,hide_index=True)
+
+        st.markdown('<div class="sec">🎯 Detail Target Kampus</div>', unsafe_allow_html=True)
+        d1,d2,d3=st.columns(3)
+        with d1: st.metric("Skor Minimum",r['info']['min'])
+        with d2: st.metric("Skor Sangat Aman",r['info']['max'])
+        with d3: st.metric("Skor Kamu (Tertimbang)",f"{r['sw']:.0f}",
+                           delta=f"{r['gap']:+.0f} vs minimum",
+                           delta_color="normal" if r['gap']>=0 else "inverse")
+
+    # ═══ TAB 3: PIPELINE & BOBOT ═══
+    with t3:
+        st.markdown('<div class="sec">🔀 Pipeline Kontribusi Subtes → Skor Total</div>', unsafe_allow_html=True)
+        st.caption("Batang berwarna = kontribusi aktual per subtes. Batang transparan = kontribusi target minimum kampus.")
+        st.plotly_chart(chart_pipeline(r['skor'],r['bobot'],r['info'],r['jurusan']),use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown(f'<div class="sec">📐 Bobot Subtes — {r["jurusan"]}</div>', unsafe_allow_html=True)
+        st.plotly_chart(chart_bobot(r['jurusan']),use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown('<div class="sec">📋 Tabel Bobot & Kontribusi</div>', unsafe_allow_html=True)
+        df_b=pd.DataFrame([{
+            "Subtes":SUBTES_LABEL[k],
+            "Bobot":f"{r['bobot'][k]*100:.0f}%",
+            "Skor":r['skor'][k],
+            "Kontribusi Aktual":f"{r['skor'][k]*r['bobot'][k]:.1f}",
+            "Kontribusi Target":f"{r['info']['min']*r['bobot'][k]:.1f}",
+            "Selisih":f"{(r['skor'][k]-r['info']['min'])*r['bobot'][k]:+.1f}",
+        } for k in SUBTES]+[{
+            "Subtes":"TOTAL","Bobot":"100%","Skor":"—",
+            "Kontribusi Aktual":f"{r['sw']:.1f}",
+            "Kontribusi Target":f"{r['info']['min']:.0f}",
+            "Selisih":f"{r['gap']:+.1f}",
+        }])
+        st.dataframe(df_b,use_container_width=True,hide_index=True)
+
+        # Bobot semua jurusan
+        st.markdown('<div class="sec">📊 Perbandingan Bobot Antar Jurusan</div>', unsafe_allow_html=True)
+        with st.expander("Lihat tabel bobot lengkap semua jurusan"):
+            rows_b=[]
+            for j,b in BOBOT_MAP.items():
+                row={"Jurusan":j}
+                row.update({f"{k} (%)":f"{b[k]*100:.0f}" for k in SUBTES})
+                rows_b.append(row)
+            st.dataframe(pd.DataFrame(rows_b),use_container_width=True,hide_index=True)
+
+    # ═══ TAB 4: JURUSAN & ALTERNATIF ═══
+    with t4:
+        st.markdown(f'<div class="sec">🎓 Analisis Jurusan Target — {r["jurusan"]}</div>', unsafe_allow_html=True)
+
+        if r['terpenuhi']:
+            # Skor aman → fokus ke jurusan target
+            st.markdown(f"""<div class="al al-s">
+              <h4>🎯 FOKUS KE JURUSAN TARGET: {r['jurusan']}</h4>
+              Peluang lolos kamu sudah <strong>{r['pl']}</strong> ({r['ppct']:.0f}%) — tidak perlu berpindah jurusan.
+              Pertahankan performa dan tingkatkan konsistensi belajar menjelang UTBK.
+            </div>""", unsafe_allow_html=True)
+
+            # Bobot jurusan target
+            st.markdown("**📋 Bobot subtes untuk jurusan ini (fokus belajar kamu):**")
+            show_bobot_chips(r['jurusan'])
+
+            # Chart bobot + progress gap
+            col_a,col_b=st.columns([1,1])
+            with col_a:
+                st.plotly_chart(chart_bobot(r['jurusan']),use_container_width=True,config={"displayModeBar":False})
+            with col_b:
+                st.markdown("**📈 Indikator Kesiapan:**")
+                prog_bar("Kesiapan Mental",r['psiko'],"#58a6ff")
+                prog_bar("Konsistensi Belajar",r['konsist'],"#3fb950")
+                prog_bar("Stabilitas Mental",r['stabilitas'],"#bc8cff")
+
+            # Subtes kunci jurusan
+            bobot_sorted=sorted(r['bobot'].items(),key=lambda x:x[1],reverse=True)
+            st.markdown('<div class="sec">🔑 Subtes Kunci untuk Jurusan Ini</div>', unsafe_allow_html=True)
+            sc=st.columns(3)
+            for col,(k,bv) in zip(sc,bobot_sorted[:3]):
+                with col:
+                    sv=r['skor'][k]
+                    kc2="c-green" if sv>=650 else "c-gold" if sv>=450 else "c-red"
+                    st.markdown(f"""<div class="card" style="text-align:center">
+                      <div class="kpi-lbl">{SUBTES_LABEL[k]}</div>
+                      <div class="kpi-val {kc2}">{sv}</div>
+                      <div class="kpi-sub">Bobot {int(bv*100)}% — {'✅' if sv>=650 else '⚡' if sv>=450 else '🔴'}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            # Jurusan alternatif — hanya formalitas
+            st.markdown('<div class="sec">📋 Jurusan Alternatif (Formalitas)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="al al-i"><h4>ℹ️ Alternatif Disajikan Sebagai Formalitas</h4>Karena skor kamu sudah aman, jurusan alternatif di bawah hanya pilihan cadangan formalitas — tidak perlu dipertimbangkan serius.</div>',
+                        unsafe_allow_html=True)
+            alt=r['alternatif']
+            if alt:
+                ac=st.columns(len(alt))
+                for col,j in zip(ac,alt):
+                    with col:
+                        st.markdown(f"""<div class="card" style="text-align:center;opacity:.65">
+                          <div style="font-size:.72rem;color:#8b949e">Alternatif Formalitas</div>
+                          <div style="font-weight:700;font-size:.88rem;margin:.3rem 0">{j}</div>
+                          <div style="font-size:.7rem;color:#8b949e">Serumpun</div>
+                        </div>""", unsafe_allow_html=True)
+
+        else:
+            # Skor belum aman → tampilkan analisis + alternatif lebih serius
+            st.markdown(f"""<div class="al al-w">
+              <h4>⚡ Skor Belum Mencapai Zona Aman — {r['jurusan']}</h4>
+              Butuh <strong>+{r['info']['min']-r['sw']:.0f} poin</strong> untuk zona aman.
+              Pertimbangkan jurusan alternatif yang sesuai kemampuan saat ini.
+            </div>""", unsafe_allow_html=True)
+
+            # Bobot jurusan target
+            st.markdown("**📋 Bobot subtes jurusan target kamu:**")
+            show_bobot_chips(r['jurusan'])
+            st.plotly_chart(chart_bobot(r['jurusan']),use_container_width=True,config={"displayModeBar":False})
+
+            # Alternatif lebih detail
+            st.markdown('<div class="sec">🔄 Jurusan Alternatif yang Direkomendasikan</div>', unsafe_allow_html=True)
+            for j in r['alternatif']:
+                bj=get_bobot(j)
+                swj=hitung_tertimbang(r['skor'],bj)
+                plj,_,pctj=hitung_peluang(swj,r['kampus'])
+                with st.expander(f"📚 {j}  —  Skor Tertimbang: {swj:.0f}  |  {plj}"):
+                    ca,cb2=st.columns(2)
+                    with ca:
+                        st.metric("Skor Tertimbang",f"{swj:.0f}")
+                        st.metric("Peluang Est.",f"{pctj:.0f}% ({plj})")
+                        st.markdown("**Bobot subtes:**")
+                        show_bobot_chips(j)
+                    with cb2:
+                        st.plotly_chart(chart_bobot(j),use_container_width=True,config={"displayModeBar":False})
+
+    # ═══ TAB 5: STRATEGI ═══
+    with t5:
+        st.markdown('<div class="sec">🚀 Strategi Belajar Personal</div>', unsafe_allow_html=True)
+
+        # Indikator
+        prog_bar("Kesiapan Mental (Psikologis)",r['psiko'],"#58a6ff")
+        prog_bar("Konsistensi Belajar",r['konsist'],"#3fb950")
+        prog_bar("Stabilitas Mental",r['stabilitas'],"#bc8cff")
+
+        st.markdown('<div class="sec">📌 Prioritas Subtes</div>', unsafe_allow_html=True)
+        sorted_s=sorted(r['skor'].items(),key=lambda x:x[1])
+        lemah=sorted_s[:3]; kuat=sorted_s[-2:]
+
+        c1p,c2p=st.columns(2)
+        with c1p:
+            il="".join(f"<li><b>{SUBTES_LABEL[k]}</b>: {v} → +{max(0,650-v)} poin dibutuhkan</li>" for k,v in lemah)
+            st.markdown(f'<div class="al al-d"><h4>🔴 Prioritas Utama (3 Terlemah)</h4><ul>{il}</ul></div>',unsafe_allow_html=True)
+        with c2p:
+            ik="".join(f"<li><b>{SUBTES_LABEL[k]}</b>: {v} ✅</li>" for k,v in kuat)
+            st.markdown(f'<div class="al al-s"><h4>🟢 Kekuatan Akademik</h4><ul>{ik}</ul></div>',unsafe_allow_html=True)
+
+        # Strategi berdasarkan level
+        st.markdown('<div class="sec">📋 Rencana Aksi</div>', unsafe_allow_html=True)
+        if r['sw']>=r['info']['max']:
+            st.markdown("""<div class="al al-s"><h4>🏆 Maintenance Mode</h4><ul>
+              <li>Tryout 1–2x/minggu untuk menjaga ketajaman</li>
+              <li>Review kesalahan kecil yang masih berulang</li>
+              <li>Fokus manajemen waktu dan mental</li>
+              <li>Jaga pola tidur minimal 7–8 jam</li></ul></div>""",unsafe_allow_html=True)
+        elif r['sw']>=r['info']['min']:
+            st.markdown(f"""<div class="al al-i"><h4>✅ Penguatan & Konsistensi</h4><ul>
+              <li>Target +{r['info']['max']-r['sw']:.0f} poin untuk zona sangat aman</li>
+              <li>Fokus 60% waktu pada {SUBTES_LABEL[sorted_s[0][0]]} (subtes terlemah)</li>
+              <li>Tryout minimal 2x/bulan + review mendalam</li>
+              <li>Simulasi 150 soal dalam 2.5 jam per sesi</li></ul></div>""",unsafe_allow_html=True)
+        else:
+            st.markdown(f"""<div class="al al-w"><h4>⚡ Intensifikasi</h4><ul>
+              <li>Target +{r['info']['min']-r['sw']:.0f} poin — bertahap +{min(50,r['info']['min']-r['sw']):.0f}/bulan</li>
+              <li>Belajar 4–5 jam/hari dengan jadwal terstruktur</li>
+              <li>Tryout mingguan + analisis soal salah mendalam</li>
+              <li>Konsultasi tutor untuk subtes berbobot tinggi</li></ul></div>""",unsafe_allow_html=True)
+
+        # Tips psikologis
+        st.markdown('<div class="sec">🧠 Tips Psikologis & Kebiasaan</div>', unsafe_allow_html=True)
+        tp1,tp2=st.columns(2)
+        with tp1:
+            if r['data']['fokus'] if 'data' in r else r.get('fokus',3) <= 2:
+                st.markdown('<div class="al al-d"><h4>🎯 Fokus Rendah</h4><ul><li>Teknik Pomodoro: 25 mnt belajar, 5 mnt istirahat</li><li>Matikan notifikasi HP saat belajar</li><li>Mulai sesi pendek (15 mnt) lalu naikkan</li></ul></div>',unsafe_allow_html=True)
+            elif r.get('fokus',3) <= 3:
+                st.markdown('<div class="al al-w"><h4>⚡ Fokus Sedang</h4><ul><li>Target sesi 45 mnt tanpa gangguan</li><li>Checklist harian untuk motivasi</li></ul></div>',unsafe_allow_html=True)
+            if r.get('kecemasan',3) >= 4:
+                st.markdown('<div class="al al-d"><h4>😰 Kecemasan Tinggi</h4><ul><li>Pernapasan 4-7-8 setiap pagi</li><li>Fokus pada proses, bukan hasil semata</li><li>Tidur cukup 7–8 jam tiap malam</li></ul></div>',unsafe_allow_html=True)
+        with tp2:
+            if r.get('distraksi',3) >= 4:
+                st.markdown('<div class="al al-d"><h4>📱 Distraksi Tinggi</h4><ul><li>Gunakan Cold Turkey / Forest app</li><li>HP di ruangan lain saat belajar</li><li>Reward diri setelah selesai sesi</li></ul></div>',unsafe_allow_html=True)
+            if r.get('review_soal',3) <= 2:
+                st.markdown('<div class="al al-w"><h4>📝 Review Soal Kurang</h4><ul><li>Review SETIAP soal yang salah — ini kunci kemajuan</li><li>Buku catatan soal sulit untuk diulang rutin</li></ul></div>',unsafe_allow_html=True)
+
+    # ═══ TAB 6: PDF ═══
+    with t6:
+        st.markdown('<div class="sec">📄 Export Laporan ke PDF</div>', unsafe_allow_html=True)
+        st.markdown("""<div class="al al-i"><h4>Cara Menyimpan sebagai PDF</h4><ol>
+          <li>Klik tombol <strong>Generate & Download Laporan HTML</strong> di bawah</li>
+          <li>Buka file HTML yang terdownload di browser</li>
+          <li>Tekan <strong>Ctrl+P</strong> (Windows) atau <strong>Cmd+P</strong> (Mac)</li>
+          <li>Pilih <strong>"Save as PDF"</strong> sebagai printer</li>
+          <li>Klik <strong>Save</strong></li>
+        </ol></div>""", unsafe_allow_html=True)
+
+        if st.button("📄  Generate & Download Laporan HTML", type="primary"):
+            html = generate_pdf_html(r)
+            b64  = base64.b64encode(html.encode()).decode()
+            fn   = f"laporan_utbk_{r.get('nama','').replace(' ','_')}.html"
+            st.markdown(f"""<a href="data:text/html;base64,{b64}" download="{fn}"
+              style="display:inline-block;background:#e3a008;color:#000;font-weight:700;
+                     padding:.6rem 1.4rem;border-radius:10px;text-decoration:none;
+                     font-family:'Space Grotesk',sans-serif;font-size:.9rem;margin-top:.5rem">
+              ⬇️ Download {fn}</a>""", unsafe_allow_html=True)
+
+        # Preview tabel laporan
+        st.markdown('<div class="sec">👁️ Preview Ringkasan</div>', unsafe_allow_html=True)
+        cp1,cp2=st.columns(2)
+        with cp1:
+            st.markdown(f"""| Info | Detail |
+|---|---|
+| Nama | {r.get('nama','—')} |
+| Jurusan | {r['jurusan']} |
+| Kampus | {r['kampus']} |
+| Klaster | {r['info']['label']} |
+| Skor Tertimbang | {r['sw']:.0f} |
+| Gap | {r['gap']:+.0f} |""")
+        with cp2:
+            st.markdown(f"""| Indikator | Nilai |
+|---|---|
+| Peluang Lolos | {r['ppct']:.0f}% ({r['pl']}) |
+| Kesiapan Mental | {r['psiko']:.0f}/100 |
+| Konsistensi | {r['konsist']:.0f}/100 |
+| Stabilitas | {r['stabilitas']:.0f}/100 |
+| Risiko | {r['risk'][0]} {r['risk'][1]} |""")
+
+    # ── Footer nav ──
     st.divider()
-    st.markdown("### 📊 Tabel Perbandingan Lengkap Semua Klaster")
-    
-    st.write("Gunakan tabel ini untuk memahami posisi skor kamu terhadap semua klaster PTN:")
-    
-    comparison_data = []
-    for klaster_id, klaster_data in PTN_DATA.items():
-        skor_min = klaster_data["skor_aman"][0]
-        skor_max = klaster_data["skor_aman"][1]
-        selisih = data['akademik'] - skor_min
-        
-        if data['akademik'] >= skor_max:
-            status = "🎯 Sangat Aman"
-            peluang = "85%"
-        elif data['akademik'] >= skor_min:
-            status = "✅ Aman"
-            peluang = "70%"
-        elif data['akademik'] >= skor_min - 30:
-            status = "⚠️ Kompetitif"
-            peluang = "50%"
-        else:
-            status = "🔴 Berisiko"
-            peluang = "30%"
-        
-        comparison_data.append({
-            "Klaster": f"{klaster_data['warna']} {klaster_data['nama']}",
-            "Rentang Skor": f"{skor_min} - {skor_max}",
-            "Skor Kamu": f"{data['akademik']:.0f}",
-            "Selisih": f"{selisih:+.0f}",
-            "Status": status,
-            "Peluang": peluang
-        })
-    
-    df = pd.DataFrame(comparison_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    
-    # Footer tips
-    st.divider()
-    st.info("""
-    💡 **Tips Menggunakan Analisis Ini:**
-    
-    1. **Jangan hanya fokus pada 1 kampus** - Gunakan strategi 3 pilihan untuk memaksimalkan peluang
-    2. **Evaluasi rutin** - Lakukan tryout berkala dan update analisis berdasarkan skor terbaru
-    3. **Fleksibel tapi strategis** - Sesuaikan pilihan berdasarkan perkembangan skor kamu
-    4. **Jangan takut gagal** - Pilihan aman tetap penting, tapi jangan takut untuk bermimpi tinggi!
-    5. **Konsisten adalah kunci** - Peningkatan skor membutuhkan waktu dan usaha konsisten
-    
-    **Ingat:** Analisis ini berdasarkan data historis. Hasil akhir tetap bergantung pada performa kamu saat UTBK!
-    """)
+    nb1,nb2,_=st.columns([1,1,4])
+    with nb1:
+        if st.button("← Ubah Data"):
+            st.session_state.page='survey'; st.session_state.step=1; st.rerun()
+    with nb2:
+        if st.button("🏠 Beranda"):
+            st.session_state.page='home'; st.rerun()
+
+    st.markdown(f"""<div style="text-align:center;padding:1.2rem;background:var(--surf);
+      border-radius:var(--r);border:1px solid var(--border);margin-top:1rem">
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:800;color:#fff">
+        💪 {nama}, kamu pasti bisa!
+      </div>
+      <div style="color:#8b949e;font-size:.83rem;margin-top:.3rem">
+        Konsistensi + strategi tepat = PTN impianmu pasti bisa diraih 🚀
+      </div>
+      <div style="color:#30363d;font-size:.72rem;margin-top:.3rem">
+        🤖 AI UTBK Dashboard — LightGBM + Analisis Holistik · Skor skala 200–{SKOR_MAX}
+      </div>
+    </div>""", unsafe_allow_html=True)
 
 
-def render_tab_analisis(data: Dict):
-    """Render tab analisis mendalam"""
-    
-    # Sapaan personal di awal analisis
-    if data['nama']:
-        st.markdown(f"### Hai {data['nama']}, mari kita telaah hasil analisis kamu secara mendalam! 🔍")
-    else:
-        st.subheader("Analisis Akademik & Psikologis Mendalam")
-    
-    # Klasifikasi Profil
-    tipe = klasifikasi_profil(
-        data['fokus'], 
-        data['percaya_diri'], 
-        data['kecemasan'], 
-        data['distraksi']
-    )
-    
-    st.markdown("### 📌 Interpretasi Profil Belajar")
-    st.write(f"""
-    Berdasarkan hasil pemodelan akademik dan psikologis, sistem mengklasifikasikan 
-    profil belajar kamu sebagai **{tipe}**.
-    
-    Skor akademik sebesar **{data['akademik']:.0f}** menunjukkan bahwa secara kognitif, 
-    kamu sudah memiliki kemampuan yang cukup untuk memahami pola soal UTBK, khususnya 
-    pada bidang yang relevan dengan jurusan **{data['jurusan']}**.
-    
-    Namun, kesiapan menghadapi UTBK tidak hanya ditentukan oleh kecerdasan akademik, 
-    tetapi juga oleh kestabilan mental, daya tahan belajar, serta kemampuan mengelola 
-    tekanan selama proses ujian.
-    """)
-    
-    # Analisis Kemampuan Akademik
-    st.markdown("### 🧩 Analisis Kemampuan Akademik")
-    
-    level_pm = "kuat" if data['PM'] >= 600 else "cukup" if data['PM'] >= 450 else "perlu ditingkatkan"
-    level_literasi = "baik" if data['LBI'] >= 550 and data['LBE'] >= 550 else "cukup" if data['LBI'] >= 450 else "perlu penguatan"
-    level_pu = "stabil" if data['PU'] >= 550 else "fluktuatif"
-    
-    st.write(f"""
-    Dari aspek akademik, performa kamu menunjukkan bahwa:
-    
-    - Kemampuan penalaran dan pemecahan masalah berada pada level **{level_pm}**
-    - Kemampuan literasi bahasa menunjukkan tingkat **{level_literasi}**
-    - Pemahaman umum dan logika dasar berada pada level **{level_pu}**
-    
-    Pola ini menunjukkan bahwa kamu sudah memiliki fondasi dasar yang memadai, namun 
-    masih terdapat beberapa aspek yang perlu difokuskan agar performa lebih konsisten 
-    di semua subtes.
-    """)
-    
-    # Analisis Psikologis
-    st.markdown("### 🧠 Analisis Psikologis & Mental Belajar")
-    
-    level_fokus = "sangat baik" if data['fokus'] >= 4 else "cukup" if data['fokus'] >= 3 else "rendah"
-    level_pd = "kesiapan mental yang kuat" if data['percaya_diri'] >= 4 else "masih perlu penguatan"
-    potensi_cemas = "mengganggu performa" if data['kecemasan'] >= 4 else "masih terkendali"
-    
-    st.write(f"""
-    Dari sisi psikologis, hasil pengukuran menunjukkan bahwa:
-    
-    - Tingkat fokus belajar berada pada level **{data['fokus']}/5**, yang berarti **{level_fokus}**
-    - Kepercayaan diri berada pada level **{data['percaya_diri']}/5**, yang menunjukkan **{level_pd}**
-    - Tingkat kecemasan berada pada level **{data['kecemasan']}/5**, yang berpotensi **{potensi_cemas}**
-    - Distraksi berada pada level **{data['distraksi']}/5**, yang menunjukkan tingkat gangguan eksternal dan internal saat belajar
-    """)
-    
-    # Analisis Risiko
-    st.markdown("### ⚠️ Analisis Risiko Performa Saat Ujian")
-    
-    nilai_risiko, level_risiko, ket_risiko = hitung_risiko(
-        data['fokus'],
-        data['percaya_diri'],
-        data['kecemasan'],
-        data['distraksi']
-    )
-    
-    st.write(f"""
-    Berdasarkan kombinasi faktor mental dan akademik, tingkat risiko kamu berada pada 
-    kategori **{level_risiko}**. 
-    
-    Artinya, kondisi saat ini **{ket_risiko}** apabila tidak dikelola dengan strategi 
-    belajar yang tepat. Risiko ini terutama dipengaruhi oleh tingkat kecemasan, konsistensi 
-    fokus, dan kemampuan menjaga kepercayaan diri dalam situasi tekanan tinggi seperti UTBK.
-    """)
-    
-    # Kesimpulan
-    st.markdown("### 📈 Kesimpulan Analisis Menyeluruh")
-    st.write(f"""
-    Secara keseluruhan, profil belajar kamu menunjukkan bahwa:
-    
-    - Kamu memiliki potensi akademik yang cukup kompetitif
-    - Fondasi pemahaman materi sudah terbentuk
-    - Faktor mental masih menjadi variabel penting yang perlu diperkuat
-    - Dengan pola latihan yang tepat, peluang peningkatan skor masih sangat besar
-    
-    Dengan pendekatan belajar yang sistematis dan disiplin, kamu memiliki peluang 
-    realistis untuk bersaing di jurusan **{data['jurusan']}**.
-    """)
-    
-    # Analisis Kebiasaan Belajar
-    st.markdown("### 📚 Analisis Kebiasaan & Pola Belajar")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Jam Belajar/Hari", f"Level {data['jam_belajar']}/5")
-        st.metric("Hari Belajar/Minggu", f"Level {data['hari_belajar']}/5")
-        st.metric("Latihan Soal/Minggu", f"Level {data['latihan_soal']}/5")
-    
-    with col2:
-        st.metric("Tryout/Bulan", f"Level {data['frekuensi_tryout']}/5")
-        st.metric("Review Soal/Minggu", f"Level {data['review_soal']}/5")
-        st.metric("Skor Kebiasaan Total", f"{data['kebiasaan']:.0f}/100", 
-                 delta=f"{data['kebiasaan_kategori']}")
-    
-    # Evaluasi kebiasaan belajar
-    if data['kebiasaan'] >= 75:
-        st.success(f"""
-        {data['kebiasaan_emoji']} **{data['kebiasaan_keterangan']}**
-        
-        Pola belajar kamu menunjukkan disiplin dan konsistensi yang sangat baik. 
-        Pertahankan momentum ini dan fokus pada peningkatan kualitas pemahaman materi.
-        """)
-    elif data['kebiasaan'] >= 60:
-        st.info(f"""
-        {data['kebiasaan_emoji']} **{data['kebiasaan_keterangan']}**
-        
-        Kamu sudah memiliki fondasi kebiasaan belajar yang baik. Untuk hasil maksimal, 
-        pertimbangkan untuk meningkatkan intensitas latihan soal dan frekuensi tryout.
-        """)
-    elif data['kebiasaan'] >= 45:
-        st.warning(f"""
-        {data['kebiasaan_emoji']} **{data['kebiasaan_keterangan']}**
-        
-        Kebiasaan belajar kamu masih inkonsisten. Untuk bersaing di UTBK, diperlukan 
-        peningkatan signifikan dalam jam belajar, latihan soal, dan review rutin.
-        """)
-    else:
-        st.error(f"""
-        {data['kebiasaan_emoji']} **{data['kebiasaan_keterangan']}**
-        
-        Pola belajar saat ini belum optimal untuk persiapan UTBK. Sangat disarankan untuk:
-        - Meningkatkan jam belajar menjadi minimal 3-4 jam/hari
-        - Belajar minimal 4-5 hari/minggu
-        - Latihan soal minimal 3x/minggu
-        - Tryout minimal 2x/bulan
-        """)
-    
-    # Rekomendasi perbaikan kebiasaan
-    st.markdown("#### 💡 Rekomendasi Perbaikan Kebiasaan Belajar")
-    
-    rekomendasi = []
-    
-    if data['jam_belajar'] < 3:
-        rekomendasi.append("• **Tingkatkan jam belajar** menjadi minimal 3-4 jam/hari untuk hasil optimal")
-    
-    if data['hari_belajar'] < 4:
-        rekomendasi.append("• **Tingkatkan konsistensi** belajar menjadi minimal 4-5 hari/minggu")
-    
-    if data['latihan_soal'] < 3:
-        rekomendasi.append("• **Perbanyak latihan soal** menjadi minimal 3-4x/minggu untuk familiaritas dengan tipe soal")
-    
-    if data['frekuensi_tryout'] < 2:
-        rekomendasi.append("• **Ikuti tryout lebih rutin** minimal 2x/bulan untuk simulasi kondisi ujian")
-    
-    if data['review_soal'] < 3:
-        rekomendasi.append("• **Tingkatkan frekuensi review** menjadi minimal 3x/minggu untuk memperbaiki kesalahan")
-    
-    if rekomendasi:
-        st.write("Berdasarkan analisis kebiasaan belajar, berikut adalah area yang perlu diperbaiki:\n")
-        for rec in rekomendasi:
-            st.write(rec)
-    else:
-        st.success("✅ Kebiasaan belajar kamu sudah sangat baik di semua aspek! Pertahankan!")
-
-
-def render_tab_strategi(data: Dict):
-    """Render tab strategi belajar"""
-    
-    # Sapaan personal
-    if data['nama']:
-        st.markdown(f"### {data['nama']}, berikut strategi belajar yang dirancang khusus untukmu! 🚀")
-    else:
-        st.subheader("Strategi Belajar Personal Terstruktur")
-    
-    st.write("""
-    Strategi berikut dirancang secara personal berdasarkan profil akademik, kondisi 
-    psikologis, serta target jurusan kamu. Pendekatan ini bertujuan untuk meningkatkan 
-    performa secara bertahap, stabil, dan berkelanjutan.
-    """)
-    
-    # Strategi Harian
-    st.markdown("### 📅 Strategi Harian")
-    st.write("""
-    1. Lakukan sesi belajar 2–3 kali sehari dengan durasi 45–60 menit
-    2. Setiap sesi fokus pada satu subtes utama
-    3. Gunakan metode *active recall* dan latihan soal
-    4. Hindari belajar pasif hanya dengan membaca materi
-    5. Akhiri sesi dengan rangkuman pribadi
-    """)
-    
-    # Strategi Penguatan Fokus
-    st.markdown("### 🧠 Strategi Penguatan Fokus")
-    
-    if data['fokus'] <= 3:
-        st.write("""
-        Karena tingkat fokus kamu masih perlu ditingkatkan, disarankan untuk:
-        
-        - Menggunakan teknik Pomodoro (25 menit belajar, 5 menit istirahat)
-        - Menyimpan ponsel di luar jangkauan saat belajar
-        - Menentukan target kecil setiap sesi
-        - Belajar di tempat yang minim distraksi
-        - Gunakan aplikasi pemblokir website untuk menghindari gangguan
-        """)
-    else:
-        st.write("""
-        Tingkat fokus kamu sudah baik. Pertahankan dengan:
-        
-        - Menjaga konsistensi jadwal belajar
-        - Menghindari multitasking
-        - Tetap gunakan teknik Pomodoro untuk memaksimalkan produktivitas
-        """)
-    
-    # Strategi Manajemen Stres
-    st.markdown("### 😌 Strategi Manajemen Stres & Kecemasan")
-    
-    if data['kecemasan'] >= 3:
-        st.write("""
-        Karena tingkat kecemasan cukup tinggi, kamu disarankan untuk:
-        
-        - Melakukan tryout rutin minimal 2x per bulan
-        - Membiasakan diri dengan batas waktu pengerjaan
-        - Latihan pernapasan sebelum belajar (teknik 4-7-8)
-        - Menghindari membandingkan diri dengan orang lain
-        - Fokus pada progres pribadi
-        - Journaling untuk mengidentifikasi sumber kecemasan
-        """)
-    else:
-        st.write("""
-        Tingkat kecemasan kamu relatif terkendali. Tetap pertahankan dengan:
-        
-        - Menjaga keseimbangan belajar dan istirahat
-        - Tetap lakukan tryout berkala untuk menjaga familiaritas dengan format ujian
-        """)
-    
-    # Strategi Akademik
-    st.markdown("### 📊 Strategi Akademik Berbasis Data")
-    
-    # Identifikasi subtes terlemah
-    skor_subtes = {
-        "PU": data['PU'], "PPU": data['PPU'], "PBM": data['PBM'],
-        "PK": data['PK'], "LBI": data['LBI'], "LBE": data['LBE'], "PM": data['PM']
-    }
-    terlemah = min(skor_subtes, key=skor_subtes.get)
-    
-    st.write(f"""
-    Berdasarkan skor akademik kamu, fokus utama sebaiknya pada:
-    
-    - **{terlemah}** sebagai prioritas utama (skor terendah: {skor_subtes[terlemah]})
-    - Subtes utama jurusan **{data['jurusan']}** sebagai target penguatan
-    - Latihan soal minimal 300–500 soal per bulan
-    - Evaluasi kesalahan secara tertulis dengan mencatat pola kesalahan
-    - Buat bank soal untuk topik yang sering salah
-    """)
-    
-    # Strategi Jangka Menengah
-    st.markdown("### 🗓️ Strategi Jangka Menengah (3–6 Bulan)")
-    st.write("""
-    Dalam periode 3–6 bulan ke depan, lakukan:
-    
-    **✅ Bulan 1–2: Fondasi**
-    - Penguatan konsep dasar
-    - Perbaikan kelemahan utama
-    - Identifikasi gap pengetahuan
-    
-    **✅ Bulan 3–4: Intensifikasi**
-    - Intensifikasi latihan soal (target 50-100 soal/minggu)
-    - Simulasi waktu ujian
-    - Mulai tryout bulanan
-    
-    **✅ Bulan 5–6: Pemantapan**
-    - Tryout mingguan
-    - Review kesalahan berulang
-    - Manajemen stamina mental dan fisik
-    """)
-    
-    # Strategi Menjelang UTBK
-    st.markdown("### 🎯 Strategi Menjelang UTBK (1 Bulan Terakhir)")
-    st.write("""
-    Pada fase akhir persiapan:
-    
-    - ❌ Kurangi belajar materi baru
-    - ✅ Fokus pada review dan penguatan
-    - ✅ Jaga pola tidur (minimal 7-8 jam/hari)
-    - ✅ Jaga nutrisi dan hidrasi
-    - ✅ Perbanyak tryout (minimal 2x per minggu)
-    - ✅ Simulasi kondisi ujian sebenarnya
-    
-    **Tujuan utama:** Menjaga performa puncak dan stabilitas mental.
-    """)
-    
-    # Rekomendasi Akhir
-    st.markdown("### 📌 Rekomendasi Akhir")
-    st.success(f"""
-    Jika strategi ini dijalankan secara disiplin, kamu berpotensi meningkatkan skor 
-    secara signifikan dalam 3–6 bulan ke depan. 
-    
-    **Kunci utama keberhasilan:**
-    - Konsistensi dalam eksekusi
-    - Evaluasi rutin (mingguan)
-    - Pengelolaan mental yang baik
-    - Fokus pada progres, bukan perfeksi
-    
-    Dengan pendekatan ini, peluang kamu di jurusan **{data['jurusan']}** akan semakin kompetitif.
-    """)
-
-
-def render_tab_jurusan(data: Dict):
-    """Render tab rekomendasi jurusan"""
-    
-    # Sapaan personal
-    if data['nama']:
-        st.markdown(f"### Rekomendasi Jurusan untuk {data['nama']} 🎓")
-    else:
-        st.subheader("Rekomendasi Jurusan Alternatif")
-    
-    akademik = data['akademik']
-    nama_panggil = data['nama'] if data['nama'] else "kamu"
-    
-    if akademik > 750:
-        st.success(f"""
-        ✅ **Peluang Sangat Kuat**
-        
-        Peluang {nama_panggil} di jurusan **{data['jurusan']}** masih sangat kuat dengan skor akademik {akademik:.0f}.
-        
-        **Alternatif jurusan yang bisa dipertimbangkan:**
-        - Teknik Informatika
-        - Kedokteran Gigi
-        - Statistika
-        - Farmasi
-        - Manajemen
-        
-        Dengan skor ini, {nama_panggil} memiliki fleksibilitas untuk memilih berbagai jurusan kompetitif.
-        """)
-        
-    elif akademik > 650:
-        st.warning(f"""
-        ⚠️ **Peluang Menengah-Atas**
-        
-        Peluang {nama_panggil} berada di level menengah-atas dengan skor akademik {akademik:.0f}.
-        
-        **Alternatif jurusan yang direkomendasikan:**
-        - Teknik Industri
-        - Ekonomi
-        - Akuntansi
-        - Psikologi
-        - Administrasi Publik
-        - Ilmu Komunikasi
-        
-        Dengan peningkatan skor 50-100 poin, peluang {nama_panggil} di jurusan pilihan utama akan meningkat signifikan.
-        """)
-        
-    else:
-        st.error(f"""
-        🔴 **Persaingan Ketat**
-        
-        Persaingan di jurusan **{data['jurusan']}** cukup berat dengan skor akademik {akademik:.0f}.
-        
-        **Alternatif jurusan yang lebih aman:**
-        - Sosiologi
-        - Geografi
-        - Sejarah
-        - Pendidikan Bahasa
-        - Bisnis
-        - Kesehatan Masyarakat
-        
-        **Rekomendasi:**
-        - Fokus pada peningkatan skor akademik 100-150 poin
-        - Pertimbangkan jurusan dengan persaingan lebih moderat
-        - Tetap siapkan pilihan cadangan yang strategis
-        """)
-    
-    st.info("""
-    **💡 Tips Memilih Jurusan:**
-    
-    1. **Minat & Passion:** Pilih jurusan yang sesuai dengan minat jangka panjang
-    2. **Kemampuan:** Sesuaikan dengan kekuatan akademik kamu
-    3. **Prospek Karir:** Pertimbangkan peluang kerja di masa depan
-    4. **Peluang Kelulusan:** Realistis dengan skor yang dimiliki
-    5. **Lokasi & Universitas:** Pertimbangkan preferensi lokasi dan akreditasi
-    
-    Memilih jurusan sebaiknya mempertimbangkan keseimbangan antara passion, kemampuan, 
-    dan peluang kelulusan agar hasil UTBK dapat dimaksimalkan.
-    """)
-
-
-# ====================================== 
-# MAIN APPLICATION
-# ====================================== 
-
+# ══════════════════════════════════════════════════════════════
+# MAIN
+# ══════════════════════════════════════════════════════════════
 def main():
-    """Fungsi utama aplikasi"""
-    # Setup
-    setup_page()
-    
-    # Load model LGBM
-    lgbm_model, lgbm_tersedia = load_lgbm_model()
-    
-    # Initialize session state untuk menyimpan status prediksi
-    if 'prediksi_clicked' not in st.session_state:
-        st.session_state.prediksi_clicked = False
-    
-    # Kumpulkan input dari sidebar
-    input_data = render_sidebar()
-    
-    # Update session state jika tombol diklik
-    if input_data['cek_prediksi']:
-        st.session_state.prediksi_clicked = True
-    
-    # Render header dengan kontrol greeting
-    render_header(input_data['nama'], st.session_state.prediksi_clicked)
-    
-    # Tampilkan hasil hanya jika tombol sudah diklik
-    if st.session_state.prediksi_clicked:
-        # Hitung semua metrik
-        skor_akademik = hitung_skor_akademik(
-            input_data['jurusan'],
-            input_data['PU'], input_data['PPU'], input_data['PBM'],
-            input_data['PK'], input_data['LBI'], input_data['LBE'], input_data['PM']
-        )
-        
-        # ===== PREDIKSI LGBM =====
-        lgbm_hasil = None
-        if lgbm_tersedia and lgbm_model is not None:
-            lgbm_hasil = prediksi_lgbm(lgbm_model, input_data)
+    render_nav()
+    {'home':page_home,'survey':page_survey,'result':page_result}[st.session_state.page]()
 
-        # Peluang lolos tetap dihitung dari formula manual (skor TPS vs passing grade)
-        peluang_lolos, peluang_kategori, peluang_ket = hitung_peluang_lolos(
-            skor_akademik,
-            input_data['kampus']
-        )
-        
-        stabilitas_mental, stabilitas_kategori, stabilitas_ket = hitung_stabilitas_mental(
-            input_data['fokus'],
-            input_data['percaya_diri'],
-            input_data['kecemasan'],
-            input_data['distraksi']
-        )
-        
-        konsistensi_belajar, konsistensi_kategori, konsistensi_ket = hitung_indeks_konsistensi(
-            input_data['jam_belajar'],
-            input_data['hari_belajar'],
-            input_data['latihan_soal'],
-            input_data['frekuensi_tryout'],
-            input_data['review_soal']
-        )
-        
-        risiko_level, risiko_emoji, risiko_ket = hitung_risiko_underperform(
-            stabilitas_mental,
-            konsistensi_belajar
-        )
-        
-        # Backward compatibility: hitung skor kebiasaan untuk tab analisis
-        skor_kebiasaan, kategori_kebiasaan, ket_kebiasaan, emoji_kebiasaan = hitung_skor_kebiasaan_belajar(
-            input_data['jam_belajar'],
-            input_data['hari_belajar'],
-            input_data['latihan_soal'],
-            input_data['frekuensi_tryout'],
-            input_data['review_soal']
-        )
-        
-        # Gabungkan semua data
-        hasil_data = {
-            **input_data,
-            'akademik': skor_akademik,
-            'peluang': peluang_lolos,
-            'peluang_kategori': peluang_kategori,
-            'peluang_keterangan': peluang_ket,
-            'stabilitas': stabilitas_mental,
-            'stabilitas_kategori': stabilitas_kategori,
-            'stabilitas_keterangan': stabilitas_ket,
-            'konsistensi': konsistensi_belajar,
-            'konsistensi_kategori': konsistensi_kategori,
-            'konsistensi_keterangan': konsistensi_ket,
-            'risiko_level': risiko_level,
-            'risiko_emoji': risiko_emoji,
-            'risiko_keterangan': risiko_ket,
-            # Backward compatibility untuk tab yang masih menggunakan
-            'kebiasaan': skor_kebiasaan,
-            'kebiasaan_kategori': kategori_kebiasaan,
-            'kebiasaan_keterangan': ket_kebiasaan,
-            'kebiasaan_emoji': emoji_kebiasaan,
-            # LGBM info
-            'lgbm_tersedia': lgbm_tersedia,
-            'lgbm_hasil'   : lgbm_hasil,
-        }
-        
-        # Render dashboard
-        render_dashboard(hasil_data)
-        
-        # Render tabs
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "🎯 Peluang Kampus",
-            "🧠 Analisis",
-            "🚀 Strategi",
-            "🎓 Jurusan"
-        ])
-        
-        with tab1:
-            render_tab_peluang_kampus(hasil_data)
-        
-        with tab2:
-            render_tab_analisis(hasil_data)
-        
-        with tab3:
-            render_tab_strategi(hasil_data)
-        
-        with tab4:
-            render_tab_jurusan(hasil_data)
-        
-        # Footer
-        st.divider()
-        
-        # Pesan penutup personal
-        if input_data['nama']:
-            st.success(f"""
-            💪 **Pesan untuk {input_data['nama']}:**
-            
-            Perjalanan menuju UTBK adalah maraton, bukan sprint. Setiap langkah kecil yang kamu ambil hari ini 
-            akan membawa dampak besar untuk masa depan. Tetap konsisten, percaya pada proses, dan jangan pernah 
-            menyerah pada impian kamu!
-            
-            Ingat: Kesuksesan bukan hanya tentang nilai, tapi tentang bagaimana kamu berkembang menjadi 
-            pribadi yang lebih baik dalam prosesnya. Saya akan selalu di sini untuk mendampingi perjalanan kamu. 
-            
-            **Semangat, {input_data['nama']}! Kamu pasti bisa! 🚀✨**
-            """)
-        
-        st.caption("🤖 AI Education Intelligence System • Enhanced Version")
-        st.caption("Dikembangkan dengan pendekatan holistik untuk persiapan UTBK yang optimal")
-    else:
-        # Tampilkan instruksi jika belum klik prediksi
-        st.info("""
-        📌 **Langkah Selanjutnya:**
-        
-        Silakan lengkapi semua informasi di sidebar, lalu klik tombol **"CEK PREDIKSI SEKARANG"** 
-        untuk melihat hasil analisis lengkap kesiapan UTBK kamu.
-        """)
-        
-        # Tampilkan preview fitur
-        st.markdown("### ✨ Yang Akan Kamu Dapatkan:")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("""
-            #### 📊 Dashboard Komprehensif
-            - Skor kesiapan keseluruhan
-            - Estimasi peluang kelulusan
-            - Analisis akademik mendalam
-            """)
-        
-        with col2:
-            st.markdown("""
-            #### 🧠 Analisis Mendalam
-            - Profil belajar personal
-            - Evaluasi psikologis
-            - Identifikasi risiko
-            """)
-        
-        with col3:
-            st.markdown("""
-            #### 🎯 Rekomendasi Praktis
-            - Strategi belajar terstruktur
-            - Timeline persiapan
-            - Alternatif jurusan
-            """)
-        
-        st.divider()
-        st.caption("🤖 AI Education Intelligence System • Enhanced Version")
-
-
-# ====================================== 
-# ENTRY POINT
-# ====================================== 
-
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
