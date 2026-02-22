@@ -1763,10 +1763,16 @@ def page_result():
                 render_alt_cards(alt_kampus, show_kampus=False)
             with fa2:
                 aman_list = [x for x in alt_kampus if x["kat"] in ("Sangat Aman","Aman")]
-                render_alt_cards(aman_list, show_kampus=False) if aman_list else st.info("Tidak ada prodi dengan kategori Aman/Sangat Aman.")
+                if aman_list:
+                    render_alt_cards(aman_list, show_kampus=False)
+                else:
+                    st.info("Tidak ada prodi dengan kategori Aman/Sangat Aman.")
             with fa3:
                 risiko_list = [x for x in alt_kampus if x["kat"] in ("Berisiko","Tidak Aman")]
-                render_alt_cards(risiko_list, show_kampus=False) if risiko_list else st.info("Semua prodi masuk kategori Aman atau Sangat Aman! 🎉")
+                if risiko_list:
+                    render_alt_cards(risiko_list, show_kampus=False)
+                else:
+                    st.info("Semua prodi masuk kategori Aman atau Sangat Aman! 🎉")
         else:
             st.info("Data prodi untuk kampus ini tidak tersedia.")
 
@@ -1782,10 +1788,16 @@ def page_result():
                 render_alt_cards(alt_ptn, show_kampus=True)
             with fb2:
                 aman_ptn = [x for x in alt_ptn if x["kat"] in ("Sangat Aman","Aman")]
-                render_alt_cards(aman_ptn, show_kampus=True) if aman_ptn else st.info("Tidak ada PTN dengan kategori Aman/Sangat Aman untuk prodi ini.")
+                if aman_ptn:
+                    render_alt_cards(aman_ptn, show_kampus=True)
+                else:
+                    st.info("Tidak ada PTN dengan kategori Aman/Sangat Aman untuk prodi ini.")
             with fb3:
                 risiko_ptn = [x for x in alt_ptn if x["kat"] in ("Berisiko","Tidak Aman")]
-                render_alt_cards(risiko_ptn, show_kampus=True) if risiko_ptn else st.info("Semua PTN masuk kategori Aman atau Sangat Aman! 🎉")
+                if risiko_ptn:
+                    render_alt_cards(risiko_ptn, show_kampus=True)
+                else:
+                    st.info("Semua PTN masuk kategori Aman atau Sangat Aman! 🎉")
         else:
             st.info(f"Tidak ditemukan prodi serupa di PTN lain dengan data yang tersedia.")
 
