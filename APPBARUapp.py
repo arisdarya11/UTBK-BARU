@@ -1,10 +1,3 @@
-"""
-SKORIA — AI UTBK Readiness Dashboard v4.0
-Platform kecerdasan buatan untuk analisis kesiapan UTBK secara holistik
-Skor maksimal: 1000 | Jenjang S1 & D3 | Multi-halaman | Charts | PDF Export
-Data skor aman berbasis SNPMB/BPPP Kemdikbud & referensi media pendidikan 2025/2026
-per jurusan, jenjang (S1/D3), dan PTN
-"""
 
 import streamlit as st
 import numpy as np
