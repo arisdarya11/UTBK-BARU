@@ -471,31 +471,33 @@ def parse_rentang(r):
 def load_database():
     """Load database dari xlsx (lokal atau GitHub)."""
     import io
-    import requests
 
     def read_xlsx(source):
-        return pd.read_excel(source, sheet_name=None)
+        return pd.read_excel(source, sheet_name=None, engine="openpyxl")
 
-    # Coba lokal dulu
-    if os.path.exists(LOCAL_S1):
-        wb_s1 = read_xlsx(LOCAL_S1)
-    else:
+    def load_file(local_path, url):
+        """Coba baca lokal, fallback ke GitHub raw URL."""
+        if os.path.exists(local_path):
+            try:
+                return read_xlsx(local_path), None
+            except Exception as e:
+                pass  # fallback ke URL
+        # Download dari GitHub
         try:
-            r = requests.get(URL_S1, timeout=15)
-            r.raise_for_status()
-            wb_s1 = read_xlsx(io.BytesIO(r.content))
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                data = resp.read()
+            return read_xlsx(io.BytesIO(data)), None
         except Exception as e:
-            return None, None, None, None, str(e)
+            return None, str(e)
 
-    if os.path.exists(LOCAL_D34):
-        wb_d34 = read_xlsx(LOCAL_D34)
-    else:
-        try:
-            r = requests.get(URL_D34, timeout=15)
-            r.raise_for_status()
-            wb_d34 = read_xlsx(io.BytesIO(r.content))
-        except Exception as e:
-            return None, None, None, None, str(e)
+    wb_s1, err = load_file(LOCAL_S1, URL_S1)
+    if wb_s1 is None:
+        return None, None, None, None, f"Gagal load S1: {err}"
+
+    wb_d34, err = load_file(LOCAL_D34, URL_D34)
+    if wb_d34 is None:
+        return None, None, None, None, f"Gagal load D3/D4: {err}"
 
     # Parse S1
     df_s1 = wb_s1.get("DATA UTBK SNBT ESTIMASI", pd.DataFrame())
@@ -792,6 +794,140 @@ def compute(d):
             "psiko":psiko,"konsist":konsist,"stab":stab,"risk":risk,
             "lgbm_r":lgbm_r,"jenjang":jenjang}
 
+
+# ══════════════════════════════════════════════════════════
+# REKOMENDASI ALTERNATIF
+# ══════════════════════════════════════════════════════════
+
+def get_rekomendasi_alternatif(skor, sw, prodi_target, kampus_target, jenjang, top_n=10):
+    """
+    Kembalikan 2 list rekomendasi:
+    1. alt_kampus_sama  : prodi lain di kampus yang SAMA, diurutkan berdasarkan kategori terbaik
+    2. alt_prodi_sama   : prodi yang SAMA (atau mirip nama) di kampus BERBEDA
+    """
+    db = get_db(jenjang)
+
+    # ── 1. Prodi lain di kampus yang sama ──
+    alt_kampus_sama = []
+    prodi_di_kampus = db.get(kampus_target, {})
+    for prodi, info in prodi_di_kampus.items():
+        if prodi == prodi_target:
+            continue
+        bobot_p = get_bobot(prodi)
+        sw_p    = hitung_tw(skor, bobot_p)
+        kat_p, kat_clr_p, badge_p, icon_p, pct_p = get_kategori_skor(sw_p, info["mn"], info["mx"])
+        alt_kampus_sama.append({
+            "prodi":       prodi,
+            "kampus":      kampus_target,
+            "mn":          info["mn"],
+            "mx":          info["mx"],
+            "sw":          round(sw_p, 1),
+            "gap":         round(sw_p - info["mn"], 1),
+            "kat":         kat_p,
+            "kat_clr":     kat_clr_p,
+            "badge":       badge_p,
+            "icon":        icon_p,
+            "ppct":        round(pct_p, 1),
+        })
+
+    # Urutkan: Sangat Aman > Aman > Berisiko > Tidak Aman, lalu gap terbesar
+    kat_order = {"Sangat Aman": 0, "Aman": 1, "Berisiko": 2, "Tidak Aman": 3}
+    alt_kampus_sama.sort(key=lambda x: (kat_order.get(x["kat"], 9), -x["gap"]))
+    alt_kampus_sama = alt_kampus_sama[:top_n]
+
+    # ── 2. Prodi sama / mirip di kampus lain ──
+    # Cari prodi di PTN lain yang namanya sama persis atau mengandung kata kunci prodi target
+    prodi_lower = prodi_target.lower()
+    # Ambil kata kunci penting (abaikan prefix D3/D4)
+    prodi_clean = prodi_lower.replace("d3 ", "").replace("d4 ", "").strip()
+
+    alt_prodi_sama = []
+    for kampus, prodi_map in db.items():
+        if kampus == kampus_target:
+            continue
+        # Cari prodi yang namanya sama persis atau mirip
+        for prodi, info in prodi_map.items():
+            prodi_cmp = prodi.lower().replace("d3 ", "").replace("d4 ", "").strip()
+            # Match: sama persis atau salah satu mengandung yang lain
+            if prodi_cmp == prodi_clean or prodi_clean in prodi_cmp or prodi_cmp in prodi_clean:
+                bobot_p = get_bobot(prodi)
+                sw_p    = hitung_tw(skor, bobot_p)
+                kat_p, kat_clr_p, badge_p, icon_p, pct_p = get_kategori_skor(sw_p, info["mn"], info["mx"])
+                alt_prodi_sama.append({
+                    "prodi":   prodi,
+                    "kampus":  kampus,
+                    "mn":      info["mn"],
+                    "mx":      info["mx"],
+                    "sw":      round(sw_p, 1),
+                    "gap":     round(sw_p - info["mn"], 1),
+                    "kat":     kat_p,
+                    "kat_clr": kat_clr_p,
+                    "badge":   badge_p,
+                    "icon":    icon_p,
+                    "ppct":    round(pct_p, 1),
+                })
+            # Hanya ambil match pertama per kampus (hindari duplikat)
+            # break setelah match
+
+    alt_prodi_sama.sort(key=lambda x: (kat_order.get(x["kat"], 9), -x["gap"]))
+    alt_prodi_sama = alt_prodi_sama[:top_n]
+
+    return alt_kampus_sama, alt_prodi_sama
+
+
+def render_alt_cards(items, show_kampus=False, show_prodi=False):
+    """Render kartu-kartu rekomendasi alternatif."""
+    if not items:
+        st.info("Tidak ada data alternatif yang ditemukan.")
+        return
+
+    badge_bg = {
+        "Sangat Aman": ("#e6f5ee", "#148a42", "#9adbb8"),
+        "Aman":        ("#edf6ff", "#1a5fa0", "#90c0f0"),
+        "Berisiko":    ("#fff4e6", "#e67e22", "#f4c08a"),
+        "Tidak Aman":  ("#fff0f0", "#c0392b", "#f4a0a0"),
+    }
+
+    for item in items:
+        bg, fc, bc = badge_bg.get(item["kat"], ("#f8faff","#334466","#ccd9f0"))
+        gap_str  = f"+{item['gap']:.0f}" if item["gap"] >= 0 else f"{item['gap']:.0f}"
+        gap_clr  = "#148a42" if item["gap"] >= 0 else "#c0392b"
+
+        if show_kampus:
+            nama_utama = item["kampus"]
+            nama_sub   = item["prodi"]
+        else:
+            nama_utama = item["prodi"]
+            nama_sub   = item["kampus"]
+
+        st.markdown(f"""
+        <div style="background:#fff;border:1.5px solid {bc};border-radius:12px;
+                    padding:.9rem 1.2rem;margin-bottom:.55rem;
+                    border-left:5px solid {fc};
+                    box-shadow:0 2px 10px rgba(30,60,140,.07);
+                    transition:all .2s ease;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.4rem">
+            <div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;
+                          font-size:.92rem;color:#12203f">{nama_utama}</div>
+              <div style="font-size:.75rem;color:#6a7a9a;margin-top:2px">{nama_sub}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+              <span style="background:{bg};color:{fc};border:1.5px solid {bc};
+                           padding:.22rem .75rem;border-radius:99px;
+                           font-size:.72rem;font-weight:700">{item['icon']} {item['kat']}</span>
+              <span style="background:#f0f4fa;color:#334466;border:1px solid #dde8f4;
+                           padding:.22rem .75rem;border-radius:99px;font-size:.72rem;font-weight:600">
+                ~{item['ppct']:.0f}% peluang</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:1.5rem;margin-top:.55rem;font-size:.78rem;flex-wrap:wrap">
+            <span>🎯 <strong>Skor kamu:</strong> <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;color:#3464c8">{item['sw']:.0f}</span></span>
+            <span>📏 <strong>Rentang aman:</strong> {item['mn']} – {item['mx']}</span>
+            <span>📊 <strong>Gap:</strong> <span style="font-weight:700;color:{gap_clr}">{gap_str}</span></span>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════
 # RENCANA BELAJAR MINGGUAN
 # ══════════════════════════════════════════════════════════
@@ -1079,7 +1215,7 @@ tr:nth-child(even) td{{background:#f7f9fc}}
 <h2>📊 Ringkasan Hasil</h2>
 <div class="kpi-row">
 <div class="kpi"><div class="lbl">Skor Tertimbang</div><div class="val {gc}">{r['sw']:.0f}</div><div class="lbl">dari 1000</div></div>
-<div class="kpi"><div class="lbl">Rata-rata Subtes</div><div class="val blue">{r['rata']:.0f}</div></div>
+<div class="kpi"><div class="lbl">Rentang Aman</div><div class="val blue">{r['mn']} – {r['mx']}</div></div>
 <div class="kpi"><div class="lbl">Peluang Lolos</div><div class="val {pc}">{r['ppct']:.0f}%</div></div>
 <div class="kpi"><div class="lbl">Gap vs Minimum</div><div class="val {gc}">{r['gap']:+.0f}</div></div>
 </div>
@@ -1493,9 +1629,10 @@ def page_result():
     kc = kc_map.get(r["kat"],"c-red")
 
     k1,k2,k3,k4,k5 = st.columns(5)
+    kampus_short = r["kampus"].split("(")[0].strip()[:22]
     for i,(col,lbl,val,cls,sub) in enumerate([
         (k1,"Skor Tertimbang",f"{r['sw']:.0f}",kc,"dari 1000"),
-        (k2,"Rata-rata Subtes",f"{r['rata']:.0f}","c-blue","7 subtes"),
+        (k2,"Rentang Aman",f"{mn}–{mx}","c-blue",kampus_short),
         (k3,"Peluang Lolos",f"{r['ppct']:.0f}%",pc,r["kat"]),
         (k4,"Gap vs Minimum",f"{r['gap']:+.0f}",gc,f"Min {mn}"),
         (k5,"Risiko Underperform",r["risk"][0],
@@ -1545,9 +1682,10 @@ def page_result():
           Butuh peningkatan signifikan atau pertimbangkan PTN/prodi alternatif.</div>""", unsafe_allow_html=True)
 
     # TABS
-    t1,t2,t3,t4,t5,t6 = st.tabs([
+    t1,t2,t3,t4,t5,t6,t7 = st.tabs([
         "📡 Radar & Skor TPS",
         "📊 Posisi & Peluang",
+        "🎯 Alternatif",
         "🔀 Pipeline & Bobot",
         "🚀 Strategi Belajar",
         "📅 Rencana Mingguan",
@@ -1597,7 +1735,89 @@ def page_result():
         with d2: st.metric("Skor Sangat Aman (atas)",mx)
         with d3: st.metric("Skor Kamu",f"{r['sw']:.0f}",delta=f"{r['gap']:+.0f}",delta_color="normal" if r["gap"]>=0 else "inverse")
 
+
     with t3:
+        sw   = r["sw"]
+        skor = r["skor"]
+        alt_kampus, alt_ptn = get_rekomendasi_alternatif(
+            skor, sw, r["prodi"], r["kampus"], r["jenjang"]
+        )
+
+        # ── Info konteks ──
+        kat_cls_info = {"Sangat Aman":"al-s","Aman":"al-i","Berisiko":"al-w","Tidak Aman":"al-d"}
+        info_cls = kat_cls_info.get(r["kat"], "al-i")
+        st.markdown(f'''<div class="al {info_cls}" style="padding:.75rem 1.1rem;margin-bottom:1rem">
+          <h4>{r["kat_icon"]} Skor Tertimbang Kamu: <strong>{sw:.0f}</strong> &nbsp;·&nbsp; Status: {r["kat"]}</h4>
+          Rekomendasi di bawah dihitung menggunakan <strong>skor TPS kamu yang sama</strong>
+          dengan bobot masing-masing program studi — sehingga skor kamu mungkin berbeda tiap prodi.
+        </div>''', unsafe_allow_html=True)
+
+        # ══ BAGIAN 1: Prodi lain, kampus sama ══
+        st.markdown('<div class="sec">🏛️ Prodi Lain di Kampus yang Sama</div>', unsafe_allow_html=True)
+        st.caption(f"Prodi lain di {r['kampus']} — diurutkan dari peluang terbaik")
+
+        if alt_kampus:
+            # Filter tabs: Semua / Sangat Aman & Aman / Berisiko & Tidak Aman
+            fa1, fa2, fa3 = st.tabs(["Semua Prodi", "✅ Aman & Sangat Aman", "⚡ Berisiko & Tidak Aman"])
+            with fa1:
+                render_alt_cards(alt_kampus, show_kampus=False)
+            with fa2:
+                aman_list = [x for x in alt_kampus if x["kat"] in ("Sangat Aman","Aman")]
+                render_alt_cards(aman_list, show_kampus=False) if aman_list else st.info("Tidak ada prodi dengan kategori Aman/Sangat Aman.")
+            with fa3:
+                risiko_list = [x for x in alt_kampus if x["kat"] in ("Berisiko","Tidak Aman")]
+                render_alt_cards(risiko_list, show_kampus=False) if risiko_list else st.info("Semua prodi masuk kategori Aman atau Sangat Aman! 🎉")
+        else:
+            st.info("Data prodi untuk kampus ini tidak tersedia.")
+
+        st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
+
+        # ══ BAGIAN 2: Prodi sama / mirip, kampus berbeda ══
+        st.markdown('<div class="sec">🔄 Prodi Serupa di Kampus Berbeda</div>', unsafe_allow_html=True)
+        st.caption(f"Mencari \"{r['prodi']}\" atau prodi serupa di PTN lain")
+
+        if alt_ptn:
+            fb1, fb2, fb3 = st.tabs(["Semua PTN", "✅ Aman & Sangat Aman", "⚡ Berisiko & Tidak Aman"])
+            with fb1:
+                render_alt_cards(alt_ptn, show_kampus=True)
+            with fb2:
+                aman_ptn = [x for x in alt_ptn if x["kat"] in ("Sangat Aman","Aman")]
+                render_alt_cards(aman_ptn, show_kampus=True) if aman_ptn else st.info("Tidak ada PTN dengan kategori Aman/Sangat Aman untuk prodi ini.")
+            with fb3:
+                risiko_ptn = [x for x in alt_ptn if x["kat"] in ("Berisiko","Tidak Aman")]
+                render_alt_cards(risiko_ptn, show_kampus=True) if risiko_ptn else st.info("Semua PTN masuk kategori Aman atau Sangat Aman! 🎉")
+        else:
+            st.info(f"Tidak ditemukan prodi serupa di PTN lain dengan data yang tersedia.")
+
+        # ══ Tabel ringkasan gabungan ══
+        st.markdown('<div class="sec">📋 Tabel Ringkasan Semua Alternatif</div>', unsafe_allow_html=True)
+        all_alt = []
+        for item in alt_kampus[:5]:
+            all_alt.append({
+                "Tipe": "Kampus Sama",
+                "Program Studi": item["prodi"],
+                "Kampus": item["kampus"],
+                "Skor Kamu": f"{item['sw']:.0f}",
+                "Rentang Aman": f"{item['mn']}–{item['mx']}",
+                "Gap": f"{item['gap']:+.0f}",
+                "Status": f"{item['icon']} {item['kat']}",
+                "Peluang": f"{item['ppct']:.0f}%",
+            })
+        for item in alt_ptn[:5]:
+            all_alt.append({
+                "Tipe": "Prodi Serupa",
+                "Program Studi": item["prodi"],
+                "Kampus": item["kampus"],
+                "Skor Kamu": f"{item['sw']:.0f}",
+                "Rentang Aman": f"{item['mn']}–{item['mx']}",
+                "Gap": f"{item['gap']:+.0f}",
+                "Status": f"{item['icon']} {item['kat']}",
+                "Peluang": f"{item['ppct']:.0f}%",
+            })
+        if all_alt:
+            st.dataframe(pd.DataFrame(all_alt), use_container_width=True, hide_index=True)
+
+    with t4:
         st.markdown('<div class="sec">🔀 Pipeline Kontribusi Subtes</div>', unsafe_allow_html=True)
         ch_pipeline(r["skor"],r["bobot"],r["info"],r["prodi"], key="r_pipe_t3")
         st.markdown(f'<div class="sec">📐 Distribusi Bobot — {r["prodi"]}</div>', unsafe_allow_html=True)
@@ -1613,7 +1833,7 @@ def page_result():
                      "Kontribusi Aktual":f"{r['sw']:.1f}","Target Minimum":f"{mn:.0f}","Selisih":f"{r['gap']:+.1f}"})
         st.dataframe(pd.DataFrame(df_b), use_container_width=True, hide_index=True)
 
-    with t4:
+    with t5:
         st.markdown('<div class="sec">🚀 Strategi Belajar Personal</div>', unsafe_allow_html=True)
         ch_psiko(r["psiko"],r["konsist"],r["stab"], key="r_psiko_t4")
         prog_bar("Kesiapan Mental",r["psiko"],"#3b6cb7")
@@ -1656,7 +1876,7 @@ def page_result():
               <li>Konsultasi tutor untuk subtes berbobot tinggi</li>
               <li>Pertimbangkan prodi/PTN yang lebih sesuai</li></ul></div>""",unsafe_allow_html=True)
 
-    with t5:
+    with t6:
         st.markdown('<div class="sec">📅 Proyeksi Skor 8 Minggu</div>', unsafe_allow_html=True)
         ch_progress(r, key="r_prog_t5")
         st.markdown('<div class="sec">📋 Detail Rencana Per Minggu</div>', unsafe_allow_html=True)
@@ -1671,7 +1891,7 @@ def page_result():
               <div class="week-tasks">{tasks_html}</div>
             </div>""", unsafe_allow_html=True)
 
-    with t6:
+    with t7:
         st.markdown('<div class="sec">📄 Export Laporan ke PDF</div>', unsafe_allow_html=True)
         st.markdown("""<div class="al al-i"><h4>Cara Menyimpan sebagai PDF</h4><ol>
           <li>Klik tombol <strong>Generate & Download Laporan HTML</strong></li>
