@@ -120,9 +120,6 @@ DEFAULTS = {"page":"home","step":1,"data":{},"result":None,"_cid":0}
 for k,v in DEFAULTS.items():
     if k not in st.session_state: st.session_state[k]=v
 
-def ckey(p="c"):
-    st.session_state._cid += 1
-    return f"{p}_{st.session_state._cid}"
 
 # ══════════════════════════════════════════════════════════
 # KONSTANTA & LOOKUP
@@ -2217,6 +2214,14 @@ def get_status(skor: float, mn: int, mx: int):
     elif skor >= mn-30:   return "Kurang","sbg-r","🔴"
     else:                 return "Perlu Kerja Keras","sbg-r","⚠️"
 
+def hitung_peluang_pct(skor, mn, mx):
+    if skor >= mx:        return min(95, 78 + (skor-mx)/max(mx,1)*10)
+    elif skor >= (mn+mx)/2: return 65 + (skor-(mn+mx)/2)/max(mx-(mn+mx)/2,1)*12
+    elif skor >= mn:      return 50 + (skor-mn)/max((mn+mx)/2-mn,1)*14
+    elif skor >= mn-30:   return 28 + (30+skor-mn)/30*20
+    elif skor >= mn-70:   return 12 + (70+skor-mn)/70*15
+    else:                 return 6.0
+
 def bar_html(label, val, mx, color):
     pct = min(100, round((val-200)/(mx-200)*100))
     return f"""<div class="prog-wrap">
@@ -2224,23 +2229,367 @@ def bar_html(label, val, mx, color):
 <div class="prog-bg"><div class="prog-fill" style="width:{pct}%;background:{color};"></div></div>
 </div>"""
 
+def prog_bar_html(label, val, color):
+    pct = max(0, min(100, val))
+    return f"""<div class="prog-wrap">
+<div class="prog-lbl"><span>{label}</span>
+<span style="color:{color};font-weight:800;font-family:'Space Grotesk',sans-serif">{pct:.0f}/100</span></div>
+<div class="prog-bg"><div class="prog-fill" style="width:{pct:.0f}%;background:linear-gradient(90deg,{color},{color}aa)"></div></div>
+</div>"""
+
+def hitung_psiko(fokus_str, anxiety_str, motivasi_str):
+    scale = {"Rendah":1,"Sedang":2,"Tinggi":3,"Sangat Tinggi":4}
+    f = scale.get(fokus_str,2); a = scale.get(anxiety_str,2); m = scale.get(motivasi_str,2)
+    cemas_inv = 5 - a  # invert: kecemasan rendah = bagus
+    score = (f*1.8 + cemas_inv*1.5 + m*1.7) / (4*1.8+4*1.5+4*1.7) * 100
+    return round(score, 1)
+
+def hitung_konsistensi(jam_hari, hari_minggu, tryout_count, durasi_utbk):
+    # Normalize jam 0-12 → 0-5, hari 1-7 → 0-5, tryout 0-30 → 0-5
+    j_n = min(5, jam_hari/12*5)
+    h_n = min(5, hari_minggu/7*5)
+    t_n = min(5, tryout_count/30*5)
+    # Durasi bonus: lebih lama lebih baik (ada waktu memperbaiki)
+    dur_bonus = {"< 1 bulan":0,"1-2 bulan":0.5,"3-4 bulan":1.0,"5-6 bulan":1.5,"6+ bulan":2.0}
+    db = dur_bonus.get(durasi_utbk, 1.0)
+    score = min(100, (j_n*2.2 + h_n*2.0 + t_n*1.5 + db) / (5*2.2+5*2.0+5*1.5+2.0) * 100)
+    return round(score, 1)
+
+def hitung_stabilitas(fokus_str, anxiety_str, motivasi_str):
+    scale = {"Rendah":1,"Sedang":2,"Tinggi":3,"Sangat Tinggi":4}
+    f=scale.get(fokus_str,2); a=scale.get(anxiety_str,2); m=scale.get(motivasi_str,2)
+    pos = (f*1.5 + m*1.5)*12.5
+    neg = a*10
+    return round(max(0, min(100, pos - neg + 40)), 1)
+
+def hitung_risiko(stab, konsist):
+    rgb = stab*0.6 + konsist*0.4
+    if rgb >= 72: return "Rendah","✅","Kemungkinan perform sesuai atau di atas kemampuan"
+    elif rgb >= 55: return "Sedang","⚠️","Ada potensi fluktuasi, jaga konsistensi latihan"
+    else: return "Tinggi","🔴","Risiko perform di bawah kemampuan, perlu perbaikan pola belajar"
+
 def render_topbar(step:int):
-    steps=[("📋","Survey"),("🧠","Analisis"),("📊","Hasil")]
+    steps=[("📋","Profil & Skor"),("🧠","Kebiasaan & Psikologis"),("📊","Hasil Analisis")]
     pills="".join(
-        f'<span class="step-pill" style="font-size:.72rem;font-weight:600;padding:.26rem .8rem;border-radius:99px;'
-        f'{"background:#e6f5ee;color:#148a42;border:1px solid #9adbb8;" if i+1<step else "background:#eef2fc;color:#3464c8;border:1px solid #aac0f0;" if i+1==step else "background:#f7f9fd;color:#6a7a9a;border:1px solid #e0e8f4;"}"'
-        f'>{("✓ " if i+1<step else f"{i+1}. ")+s[0]+" "+s[1]}</span>'
+        f'<span style="font-size:.72rem;font-weight:600;padding:.26rem .8rem;border-radius:99px;'
+        f'{"background:#e6f5ee;color:#148a42;border:1px solid #9adbb8;" if i+1<step else "background:#eef2fc;color:#3464c8;border:1px solid #aac0f0;" if i+1==step else "background:#f7f9fd;color:#6a7a9a;border:1px solid #e0e8f4;"}">'
+        f'{("✓ " if i+1<step else f"{i+1}. ")+s[0]+" "+s[1]}</span>'
         for i,s in enumerate(steps))
     st.markdown(f"""<div style="display:flex;align-items:center;gap:.8rem;background:#fff;
     border-bottom:2px solid #e0e8f4;padding:.6rem 1.5rem;margin:-1rem -1.5rem 1.5rem;
     position:sticky;top:0;z-index:999;box-shadow:0 2px 12px rgba(30,60,140,.07);">
-    <span style="font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:800;color:#3464c8;animation:float 3s ease-in-out infinite">🎯 SKORIA</span>
+    <span style="font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:800;color:#3464c8;">🎯 SKORIA</span>
     <span style="font-size:.65rem;color:#6a7a9a;flex:1">AI UTBK Dashboard v4.0</span>
     {pills}
     </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# PAGE HOME
+# PDF GENERATION (reportlab)
+# ══════════════════════════════════════════════════════════
+def generate_pdf_bytes(r: dict) -> bytes:
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
+                                     TableStyle, HRFlowable, KeepTogether)
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        leftMargin=1.8*cm, rightMargin=1.8*cm,
+        topMargin=1.8*cm, bottomMargin=1.8*cm)
+
+    # Colors
+    C_BLUE   = colors.HexColor("#3464c8")
+    C_DARK   = colors.HexColor("#12203f")
+    C_MID    = colors.HexColor("#334466")
+    C_LIGHT  = colors.HexColor("#6a7a9a")
+    C_GREEN  = colors.HexColor("#148a42")
+    C_RED    = colors.HexColor("#c0392b")
+    C_ORANGE = colors.HexColor("#d4620a")
+    C_GOLD   = colors.HexColor("#c8890a")
+    C_BG     = colors.HexColor("#eef2fc")
+    C_BGALT  = colors.HexColor("#f7f9fd")
+    C_BDR    = colors.HexColor("#e0e8f4")
+
+    styles = getSampleStyleSheet()
+    def sty(name, **kw):
+        return ParagraphStyle(name, parent=styles["Normal"], **kw)
+
+    S_H1    = sty("h1", fontName="Helvetica-Bold", fontSize=18, textColor=C_DARK, spaceAfter=4, leading=22)
+    S_H2    = sty("h2", fontName="Helvetica-Bold", fontSize=11, textColor=C_BLUE, spaceAfter=4, spaceBefore=12, leading=14)
+    S_H3    = sty("h3", fontName="Helvetica-Bold", fontSize=9.5, textColor=C_DARK, spaceAfter=2, spaceBefore=4)
+    S_BODY  = sty("body", fontSize=9, textColor=C_MID, spaceAfter=3, leading=13)
+    S_SMALL = sty("small", fontSize=7.5, textColor=C_LIGHT, spaceAfter=2)
+    S_CTR   = sty("ctr", fontSize=9, textColor=C_MID, alignment=TA_CENTER, leading=13)
+    S_BRAND = sty("brand", fontName="Helvetica-Bold", fontSize=22, textColor=colors.white,
+                  spaceAfter=2, leading=26)
+    S_SUB   = sty("sub", fontSize=8, textColor=colors.HexColor("#9ab0d8"), spaceAfter=0)
+    S_BULLET= sty("bullet", fontSize=8.5, textColor=C_MID, spaceAfter=2, leading=12,
+                  leftIndent=12, bulletIndent=2)
+
+    def hr(): return HRFlowable(width="100%", thickness=1, color=C_BDR, spaceAfter=6, spaceBefore=6)
+    def section(title):
+        return [Spacer(1,6),
+                Paragraph(title, S_H2),
+                HRFlowable(width="100%", thickness=2, color=C_BLUE, spaceAfter=6)]
+    def bullet(text):
+        return Paragraph(f"• {text}", S_BULLET)
+
+    # Tabel helper
+    TBL_STYLE = TableStyle([
+        ('BACKGROUND',(0,0),(-1,0), C_BG),
+        ('TEXTCOLOR',(0,0),(-1,0), C_DARK),
+        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+        ('FONTSIZE',(0,0),(-1,0), 8.5),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white, C_BGALT]),
+        ('FONTSIZE',(0,1),(-1,-1), 8),
+        ('TEXTCOLOR',(0,1),(-1,-1), C_MID),
+        ('GRID',(0,0),(-1,-1), 0.5, C_BDR),
+        ('BOTTOMPADDING',(0,0),(-1,-1), 4),
+        ('TOPPADDING',(0,0),(-1,-1), 4),
+        ('LEFTPADDING',(0,0),(-1,-1), 6),
+        ('RIGHTPADDING',(0,0),(-1,-1), 6),
+    ])
+
+    story = []
+    import datetime
+    now = datetime.datetime.now().strftime("%d %B %Y, %H:%M")
+    skor = r["skor_weighted"]
+    mn = r["mn"]; mx = r["mx"]
+    gap = r["gap"]
+    nama = r["nama"]; ptn = r["ptn"]; jurusan = r["jurusan"]
+    scores = r["scores"]; sa = r["subtes_analysis"]; bobot = r["bobot"]
+    kl, kl_lbl = r["klaster"]
+    profil = r.get("profil", {})
+    psiko = r.get("psiko_score", 0)
+    konsist = r.get("konsist_score", 0)
+    stab = r.get("stab_score", 0)
+    risiko_lbl, risiko_icon, risiko_desc = r.get("risiko", ("Sedang","⚠️","—"))
+    ppct = r.get("peluang_pct", 50)
+    peluang_status = r.get("status", "Batas Aman")
+
+    # ── HEADER
+    header_data = [[
+        Paragraph("🎯 SKORIA", sty("b2", fontName="Helvetica-Bold", fontSize=20,
+                                    textColor=colors.white, leading=24)),
+        Paragraph(f"AI UTBK Readiness Report<br/><font size='8' color='#9ab0d8'>Digenerate: {now}</font>",
+                  sty("bh", fontSize=11, textColor=colors.white, leading=15))
+    ]]
+    header_tbl = Table(header_data, colWidths=[5*cm, None])
+    header_tbl.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1), colors.HexColor("#1a3470")),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+        ('LEFTPADDING',(0,0),(-1,-1), 14),
+        ('RIGHTPADDING',(0,0),(-1,-1), 14),
+        ('TOPPADDING',(0,0),(-1,-1), 12),
+        ('BOTTOMPADDING',(0,0),(-1,-1), 12),
+        ('ROUNDEDCORNERS',[8]),
+    ]))
+    story.append(header_tbl)
+    story.append(Spacer(1, 12))
+
+    # ── PROFIL SISWA
+    story += section("👤 Profil Siswa & Target")
+    profil_data = [
+        ["Nama", nama, "Jurusan", jurusan],
+        ["PTN Target", ptn, "Klaster PTN", kl_lbl],
+        ["Nilai Min Aman", str(mn), "Nilai Max Aman", str(mx)],
+        ["Durasi UTBK", profil.get("durasi_utbk","—"),
+         "Jam Belajar/Hari", f"{profil.get('jam_hari','?')} jam"],
+    ]
+    tbl = Table([[Paragraph(str(c), sty("tc", fontSize=8.5,
+                  fontName="Helvetica-Bold" if i%2==0 else "Helvetica",
+                  textColor=C_DARK if i%2==0 else C_MID))
+                  for i,c in enumerate(row)] for row in profil_data],
+                colWidths=[3.5*cm, 6*cm, 3.5*cm, None])
+    tbl.setStyle(TableStyle([
+        ('ROWBACKGROUNDS',(0,0),(-1,-1),[C_BG, colors.white]),
+        ('GRID',(0,0),(-1,-1),0.5,C_BDR),
+        ('LEFTPADDING',(0,0),(-1,-1),6),
+        ('RIGHTPADDING',(0,0),(-1,-1),6),
+        ('TOPPADDING',(0,0),(-1,-1),5),
+        ('BOTTOMPADDING',(0,0),(-1,-1),5),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1,8))
+
+    # ── KPI ROW
+    story += section("📊 Ringkasan Hasil")
+    gc = C_GREEN if gap <= 0 else C_RED
+    pc = C_GREEN if ppct>=65 else C_ORANGE if ppct>=45 else C_RED
+    kpi_data = [[
+        Paragraph(f"<b>Skor Tertimbang</b><br/><font size='18' color='#{C_BLUE.hexval()[2:]}'>"+
+                  f"{skor:.0f}</font><br/><font size='7.5' color='#6a7a9a'>dari 1000</font>", S_CTR),
+        Paragraph(f"<b>Peluang Lolos</b><br/><font size='18' color='#{pc.hexval()[2:]}'>"+
+                  f"{ppct:.0f}%</font><br/><font size='7.5' color='#6a7a9a'>{peluang_status}</font>", S_CTR),
+        Paragraph(f"<b>Gap vs Minimum</b><br/><font size='18' color='#{gc.hexval()[2:]}'>"+
+                  f"{gap:+.0f}</font><br/><font size='7.5' color='#6a7a9a'>Min: {mn}</font>", S_CTR),
+        Paragraph(f"<b>Risiko Underperform</b><br/><font size='14'>"+
+                  f"{risiko_icon} {risiko_lbl}</font><br/><font size='7' color='#6a7a9a'>{risiko_desc[:30]}...</font>", S_CTR),
+    ]]
+    kpi_tbl = Table(kpi_data, colWidths=[None]*4)
+    kpi_tbl.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(0,0), colors.HexColor("#eef2fc")),
+        ('BACKGROUND',(1,0),(1,0), colors.HexColor("#edfbf3")),
+        ('BACKGROUND',(2,0),(2,0), colors.HexColor("#fff7ee") if gap>0 else colors.HexColor("#edfbf3")),
+        ('BACKGROUND',(3,0),(3,0), colors.HexColor("#f3eeff")),
+        ('GRID',(0,0),(-1,-1),0.5, C_BDR),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+        ('TOPPADDING',(0,0),(-1,-1),10),
+        ('BOTTOMPADDING',(0,0),(-1,-1),10),
+        ('ROUNDEDCORNERS',[6]),
+    ]))
+    story.append(kpi_tbl)
+    story.append(Spacer(1,8))
+
+    # ── SKOR SUBTES
+    story += section("📋 Detail Skor & Bobot Subtes")
+    header_row = ["Subtes","Nama Lengkap","Bobot","Skor","Kontribusi","Level"]
+    rows = [[
+        Paragraph(s, sty("sc", fontSize=8.5, fontName="Helvetica-Bold", textColor=colors.HexColor(SUBTES_CLR[s]))),
+        Paragraph(SUBTES_FULL[s], sty("sn", fontSize=8)),
+        Paragraph(f"{bobot[s]*100:.0f}%", sty("sb", fontSize=8.5, fontName="Helvetica-Bold", alignment=TA_CENTER)),
+        Paragraph(str(int(sa[s]["skor"])), sty("sv", fontSize=8.5, fontName="Helvetica-Bold",
+                  textColor=C_GREEN if sa[s]["skor"]>=700 else C_ORANGE if sa[s]["skor"]>=550 else C_RED,
+                  alignment=TA_CENTER)),
+        Paragraph(f"{sa[s]['kontribusi']:.1f}", sty("sk", fontSize=8, alignment=TA_CENTER)),
+        Paragraph(sa[s]["level"], sty("sl", fontSize=8, textColor=C_LIGHT)),
+    ] for s in SUBTES]
+    subtes_tbl = Table(
+        [[Paragraph(h, sty("th", fontName="Helvetica-Bold", fontSize=8.5)) for h in header_row]] + rows,
+        colWidths=[1.5*cm, 5*cm, 1.5*cm, 1.5*cm, 2.2*cm, 3*cm])
+    subtes_tbl.setStyle(TBL_STYLE)
+    story.append(subtes_tbl)
+    story.append(Spacer(1,4))
+
+    # Total row
+    total_data = [["","TOTAL SKOR TERTIMBANG","100%",
+                   Paragraph(f"<b>{skor:.1f}</b>", sty("tot",fontName="Helvetica-Bold",
+                   fontSize=10, textColor=C_GREEN if gap<=0 else C_ORANGE)),"",""]]
+    tot_tbl = Table(total_data, colWidths=[1.5*cm, 5*cm, 1.5*cm, 1.5*cm, 2.2*cm, 3*cm])
+    tot_tbl.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1), C_BG),
+        ('FONTNAME',(0,0),(-1,-1),'Helvetica-Bold'),
+        ('FONTSIZE',(0,0),(-1,-1),8.5),
+        ('GRID',(0,0),(-1,-1),0.5,C_BDR),
+        ('BOTTOMPADDING',(0,0),(-1,-1),5),
+        ('TOPPADDING',(0,0),(-1,-1),5),
+        ('LEFTPADDING',(0,0),(-1,-1),6),
+        ('RIGHTPADDING',(0,0),(-1,-1),6),
+        ('SPAN',(0,0),(0,0)),
+    ]))
+    story.append(tot_tbl)
+
+    # ── INDIKATOR PSIKOLOGIS
+    story += section("🧠 Indikator Psikologis & Kebiasaan Belajar")
+    psy_data = [
+        ["Indikator","Nilai","Keterangan"],
+        ["Kesiapan Mental",f"{psiko:.0f}/100","Fokus, motivasi, dan manajemen kecemasan"],
+        ["Konsistensi Belajar",f"{konsist:.0f}/100","Frekuensi & durasi latihan harian"],
+        ["Stabilitas Mental",f"{stab:.0f}/100","Kemampuan menjaga performa stabil"],
+        ["Risiko Underperform",f"{risiko_icon} {risiko_lbl}", risiko_desc],
+        ["Fokus",profil.get("fokus","—"),"Kemampuan berkonsentrasi saat belajar"],
+        ["Kecemasan Ujian",profil.get("anxiety","—"),"Rendah = lebih baik"],
+        ["Motivasi",profil.get("motivasi","—"),"Dorongan untuk mencapai target"],
+        ["Durasi UTBK",profil.get("durasi_utbk","—"),"Waktu tersisa untuk persiapan"],
+        ["Jam Belajar/Hari",f"{profil.get('jam_hari','?')} jam","Rata-rata waktu belajar per hari"],
+        ["Hari Belajar/Minggu",f"{profil.get('hari_minggu','?')} hari","Konsistensi per minggu"],
+        ["Tryout Dilakukan",f"{profil.get('tryout_count','?')} kali","Pengalaman simulasi ujian"],
+    ]
+    psy_tbl = Table([[Paragraph(str(c), sty("pc", fontSize=8.5,
+                      fontName="Helvetica-Bold" if i==0 else "Helvetica",
+                      textColor=C_DARK if i==0 else C_MID))
+                      for i,c in enumerate(row)] for row in psy_data],
+                    colWidths=[4.5*cm, 3*cm, None])
+    psy_tbl.setStyle(TBL_STYLE)
+    story.append(psy_tbl)
+
+    # ── ANALISIS TARGET
+    story += section("🎯 Analisis Target & Rekomendasi Jurusan Alternatif")
+    alt_same = r.get("alternatif_same_ptn", [])
+    alt_diff  = r.get("alternatif_diff_ptn", [])
+
+    story.append(Paragraph(f"Jurusan Alternatif di {ptn}:", S_H3))
+    if alt_same:
+        alt_rows = [["Jurusan","Min Aman","Max Aman","Skor Kamu","Status"]]
+        for a in alt_same:
+            mn_a, mx_a = get_target_range(ptn, a)
+            st_a, _, ic_a = get_status(skor, mn_a, mx_a)
+            alt_rows.append([a, str(mn_a), str(mx_a), f"{skor:.0f}", f"{ic_a} {st_a}"])
+        alt_tbl = Table([[Paragraph(c, sty("at", fontSize=8, fontName="Helvetica-Bold" if i==0 else "Helvetica"))
+                          for i,c in enumerate(row)] for row in alt_rows],
+                        colWidths=[5*cm,2*cm,2*cm,2.5*cm,None])
+        alt_tbl.setStyle(TBL_STYLE)
+        story.append(alt_tbl)
+    else:
+        story.append(Paragraph("(Tidak tersedia)", S_BODY))
+    story.append(Spacer(1,6))
+
+    story.append(Paragraph("Jurusan Alternatif di PTN Lain (Realistis):", S_H3))
+    if alt_diff:
+        altd_rows = [["Jurusan","PTN","Klaster","Min","Max","Status"]]
+        for item in alt_diff[:8]:
+            altd_rows.append([item["jurusan"],item["ptn"][:28],item["kl_lbl"],
+                              str(item["mn"]),str(item["mx"]),f"{item['icon']} {item['status']}"])
+        altd_tbl = Table([[Paragraph(c, sty("adt", fontSize=8, fontName="Helvetica-Bold" if i==0 else "Helvetica"))
+                           for i,c in enumerate(row)] for row in altd_rows],
+                         colWidths=[3.5*cm, 4*cm, 3*cm, 1.2*cm, 1.2*cm, None])
+        altd_tbl.setStyle(TBL_STYLE)
+        story.append(altd_tbl)
+    else:
+        story.append(Paragraph("(Tidak tersedia)", S_BODY))
+
+    # ── REKOMENDASI
+    story += section("💡 Rekomendasi Personal")
+    for kind, title, pts in r.get("rekom", []):
+        icon_map={"strength":"✅","weakness":"⚠️","danger":"🔴","info":"ℹ️","success":"🎉"}
+        story.append(Paragraph(f"{icon_map.get(kind,'💡')} {title}", S_H3))
+        for p in pts:
+            story.append(bullet(p))
+        story.append(Spacer(1,4))
+
+    # ── STUDY PLAN
+    story += section("📅 Rencana Belajar Mingguan Detail")
+    plan = r.get("plan", [])
+    fase_colors = {"Fondasi":"#3464c8","Intensif":"#d4620a","Pemantapan":"#148a42","Final":"#c8890a"}
+    for item in plan:
+        period = item["period"]; fase = item["fase"]
+        target = item["target"]; jam_label = item["jam"]
+        tasks = item["tasks"]
+        clr = fase_colors.get(fase,"#6b3fca")
+        c_obj = colors.HexColor(clr)
+        week_data = [[
+            Paragraph(f"<b>{period}</b> — <font color='{clr}'>{fase.upper()}</font>", sty("wt",fontSize=9)),
+            Paragraph(f"🎯 Target: <b>{target}</b> &nbsp;&nbsp; ⏰ {jam_label}", sty("wd",fontSize=8.5))
+        ]]
+        week_tbl = Table(week_data, colWidths=[5*cm, None])
+        week_tbl.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,-1), colors.HexColor(clr+"22")),
+            ('LEFTBORDER',(0,0),(0,-1), 4, c_obj),
+            ('GRID',(0,0),(-1,-1),0.3,C_BDR),
+            ('LEFTPADDING',(0,0),(-1,-1),8),
+            ('RIGHTPADDING',(0,0),(-1,-1),8),
+            ('TOPPADDING',(0,0),(-1,-1),5),
+            ('BOTTOMPADDING',(0,0),(-1,-1),5),
+        ]))
+        tasks_items = [bullet(t) for t in tasks]
+        story.append(KeepTogether([week_tbl, Spacer(1,2)] + tasks_items + [Spacer(1,6)]))
+
+    # ── FOOTER
+    story.append(hr())
+    story.append(Paragraph(
+        "🎯 SKORIA v4.0 — AI UTBK Intelligence · Data SNPMB/BPPP Kemdikbud & Estimasi Historis 2022–2024 · Skor skala 200–1000",
+        sty("foot", fontSize=7, textColor=C_LIGHT, alignment=TA_CENTER)))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+# ══════════════════════════════════════════════════════════
+# PAGE: HOME
 # ══════════════════════════════════════════════════════════
 def page_home():
     st.markdown("""<div class="hero">
@@ -2266,17 +2615,17 @@ def page_home():
     <div class="feat-desc">Data estimasi nilai aman dari historis UTBK 2022-2024 sumber terpercaya</div></div>
     <div class="feat-card"><span class="feat-icon">🤖</span>
     <div class="feat-title">Rekomendasi AI</div>
-    <div class="feat-desc">Strategi belajar personal berbasis analisis profil skor dan target PTN-mu</div></div>
-    <div class="feat-card"><span class="feat-icon">📅</span>
-    <div class="feat-title">Study Plan 8 Minggu</div>
-    <div class="feat-desc">Rencana belajar terstruktur disesuaikan kelemahan dan waktu tersisa</div></div>
+    <div class="feat-desc">Strategi belajar personal berbasis analisis profil skor dan kondisi psikologis</div></div>
+    <div class="feat-card"><span class="feat-icon">📄</span>
+    <div class="feat-title">Export PDF</div>
+    <div class="feat-desc">Download laporan lengkap PDF — analisis, study plan 8 minggu, rekomendasi</div></div>
     </div>""", unsafe_allow_html=True)
 
     st.markdown("""<div class="al al-i">
     <h4>ℹ️ Tentang Data</h4>
-    Data estimasi nilai aman bersumber dari historis UTBK-SNBT 2022–2024 yang dikompilasi dari 
-    bocahkampus.com, quipper.com, tipskuliah.com, cerebrum.id, dan studiliv.com. 
-    Data resmi: <b>snpmb.bppp.kemdikbud.go.id</b>. 
+    Data estimasi nilai aman bersumber dari historis UTBK-SNBT 2022–2024 yang dikompilasi dari
+    bocahkampus.com, quipper.com, tipskuliah.com, cerebrum.id, dan studiliv.com.
+    Data resmi: <b>snpmb.bppp.kemdikbud.go.id</b>.
     Nilai aktual dapat berbeda tergantung tahun dan jumlah peminat.
     </div>""", unsafe_allow_html=True)
 
@@ -2286,14 +2635,17 @@ def page_home():
             st.session_state.page="survey"; st.session_state.step=1; st.rerun()
 
 # ══════════════════════════════════════════════════════════
-# PAGE SURVEY
+# PAGE: SURVEY (2 STEPS — sesuai uploaded app.py)
 # ══════════════════════════════════════════════════════════
 def page_survey():
-    render_topbar(1)
+    render_topbar(st.session_state.step)
     d = st.session_state.data
 
+    # ── STEP 1: Profil, Target PTN/Jurusan, Skor TPS
     if st.session_state.step == 1:
-        st.markdown('<div class="sec">📋 Informasi Dasar & Target</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec">📋 Langkah 1: Profil & Skor TPS</div>', unsafe_allow_html=True)
+
+        # ─ Info Dasar
         st.markdown('<div class="form-box"><h3>👤 Data Diri & Target</h3>', unsafe_allow_html=True)
         col1,col2 = st.columns(2)
         with col1:
@@ -2304,6 +2656,7 @@ def page_survey():
                 index=DAFTAR_JURUSAN_S1.index(d.get("jurusan",DAFTAR_JURUSAN_S1[0])),key="inp_jurusan")
             asal=st.text_input("Asal Sekolah (opsional)",value=d.get("asal",""),key="inp_asal")
         st.markdown('</div>', unsafe_allow_html=True)
+
         if ptn and jurusan:
             mn,mx = get_target_range(ptn,jurusan)
             kl,kl_lbl = get_klaster_ptn(ptn)
@@ -2313,22 +2666,14 @@ def page_survey():
             <b>Estimasi nilai aman:</b> {mn}–{mx} &nbsp;|&nbsp;
             <b>Nilai tengah:</b> {(mn+mx)//2}
             </div>""", unsafe_allow_html=True)
-        col1,col2=st.columns(2)
-        with col1:
-            if st.button("← Beranda",key="btn_s1_back"): st.session_state.page="home"; st.rerun()
-        with col2:
-            if st.button("Lanjut: Input Skor →",type="primary",use_container_width=True,key="btn_s1_next"):
-                if not nama: st.warning("Masukkan nama terlebih dahulu.")
-                else:
-                    d.update({"nama":nama,"ptn":ptn,"jurusan":jurusan,"asal":asal})
-                    st.session_state.step=2; st.rerun()
 
-    elif st.session_state.step == 2:
-        st.markdown('<div class="sec">📝 Prediksi Skor 7 Subtes TPS</div>', unsafe_allow_html=True)
-        st.markdown("""<div class="al al-i"><h4>ℹ️ Panduan</h4>
+        # ─ Skor TPS
+        st.markdown('<div class="sec">📊 Skor 7 Subtes TPS</div>', unsafe_allow_html=True)
+        st.markdown("""<div class="al al-i"><h4>ℹ️ Panduan Input</h4>
         Masukkan <b>estimasi skor</b> berdasarkan tryout atau perkiraanmu. Skala: <b>200–1000</b> per subtes.
         </div>""", unsafe_allow_html=True)
-        scores = d.get("scores",{s:500 for s in SUBTES})
+
+        scores = d.get("scores", {s:500 for s in SUBTES})
         new_scores = {}
         cola,colb = st.columns(2)
         with cola:
@@ -2343,113 +2688,297 @@ def page_survey():
                 new_scores[s]=st.number_input(f"{s} — {SUBTES_FULL[s]}",min_value=200,max_value=1000,
                     value=int(scores.get(s,500)),step=5,key=f"inp_{s}")
             st.markdown('</div>', unsafe_allow_html=True)
+
+        col1,col2=st.columns(2)
+        with col1:
+            if st.button("← Beranda",key="btn_s1_back"): st.session_state.page="home"; st.rerun()
+        with col2:
+            if st.button("Lanjut: Kebiasaan & Psikologis →",type="primary",use_container_width=True,key="btn_s1_next"):
+                if not nama: st.warning("Masukkan nama terlebih dahulu.")
+                else:
+                    d.update({"nama":nama,"ptn":ptn,"jurusan":jurusan,"asal":asal,"scores":new_scores})
+                    st.session_state.step=2; st.rerun()
+
+    # ── STEP 2: Kebiasaan Belajar + Psikologis (sesuai uploaded app.py)
+    elif st.session_state.step == 2:
+        st.markdown('<div class="sec">🧠 Langkah 2: Kebiasaan Belajar & Psikologis</div>', unsafe_allow_html=True)
+
+        # Kebiasaan Belajar — mirip uploaded app.py step 3 (Kebiasaan) + step 4 (Psikologis)
+        st.markdown('<div class="form-box"><h3>📚 Kebiasaan Belajar</h3>', unsafe_allow_html=True)
         col1,col2,col3=st.columns(3)
         with col1:
-            if st.button("← Kembali",key="btn_s2_back"): st.session_state.step=1; st.rerun()
+            jam_hari=st.slider("⏰ Jam belajar/hari",0,12,int(d.get("jam_hari",4)),key="inp_jam",
+                help="Rata-rata jam belajar per hari")
+        with col2:
+            hari_minggu=st.slider("📅 Hari belajar/minggu",1,7,int(d.get("hari_minggu",5)),key="inp_hari",
+                help="Berapa hari dalam seminggu kamu belajar")
         with col3:
-            if st.button("Lanjut: Profil Belajar →",type="primary",use_container_width=True,key="btn_s2_next"):
-                d["scores"]=new_scores; st.session_state.step=3; st.rerun()
-
-    elif st.session_state.step == 3:
-        st.markdown('<div class="sec">📚 Profil & Kebiasaan Belajar</div>', unsafe_allow_html=True)
-        st.markdown('<div class="form-box"><h3>⏰ Kebiasaan Belajar</h3>', unsafe_allow_html=True)
-        col1,col2,col3=st.columns(3)
-        with col1: jam_hari=st.slider("Jam belajar/hari",0,12,int(d.get("jam_hari",4)),key="inp_jam")
-        with col2: hari_minggu=st.slider("Hari belajar/minggu",1,7,int(d.get("hari_minggu",5)),key="inp_hari")
-        with col3: tryout_count=st.slider("Jumlah tryout",0,30,int(d.get("tryout_count",3)),key="inp_tryout")
+            tryout_count=st.slider("📝 Jumlah tryout (total)",0,30,int(d.get("tryout_count",3)),key="inp_tryout",
+                help="Total tryout yang sudah pernah dilakukan")
         st.markdown('</div>', unsafe_allow_html=True)
+
+        # Psikologis & Waktu
         st.markdown('<div class="form-box"><h3>🧠 Kondisi Psikologis & Waktu</h3>', unsafe_allow_html=True)
         col1,col2=st.columns(2)
         opts_level=["Rendah","Sedang","Tinggi","Sangat Tinggi"]
         with col1:
-            fokus=st.select_slider("Tingkat Fokus",opts_level,value=d.get("fokus","Tinggi"),key="inp_fokus")
-            anxiety=st.select_slider("Tingkat Kecemasan",opts_level,value=d.get("anxiety","Sedang"),key="inp_anxiety")
+            fokus=st.select_slider("🎯 Tingkat Fokus",opts_level,value=d.get("fokus","Tinggi"),key="inp_fokus",
+                help="Kemampuanmu untuk fokus dan berkonsentrasi saat belajar")
+            anxiety=st.select_slider("😰 Tingkat Kecemasan Ujian",opts_level,value=d.get("anxiety","Sedang"),key="inp_anxiety",
+                help="Rendah = lebih baik. Seberapa cemas kamu menghadapi ujian")
         with col2:
-            motivasi=st.select_slider("Tingkat Motivasi",opts_level,value=d.get("motivasi","Tinggi"),key="inp_motivasi")
-            durasi_utbk=st.selectbox("Berapa bulan lagi UTBK?",
+            motivasi=st.select_slider("💪 Tingkat Motivasi",opts_level,value=d.get("motivasi","Tinggi"),key="inp_motivasi",
+                help="Seberapa kuat doronganmu untuk mencapai target PTN")
+            durasi_utbk=st.selectbox("📆 Berapa bulan lagi UTBK?",
                 ["< 1 bulan","1-2 bulan","3-4 bulan","5-6 bulan","6+ bulan"],
                 index=["< 1 bulan","1-2 bulan","3-4 bulan","5-6 bulan","6+ bulan"].index(d.get("durasi_utbk","3-4 bulan")),
-                key="inp_durasi")
+                key="inp_durasi",
+                help="Sisa waktu persiapan UTBK. Berpengaruh pada strategi belajar")
         st.markdown('</div>', unsafe_allow_html=True)
+
+        # Preview indikator real-time
+        psiko_prev = hitung_psiko(fokus, anxiety, motivasi)
+        konsist_prev = hitung_konsistensi(jam_hari, hari_minggu, tryout_count, durasi_utbk)
+        stab_prev = hitung_stabilitas(fokus, anxiety, motivasi)
+        col_p1,col_p2,col_p3 = st.columns(3)
+        with col_p1:
+            pc_color = "#148a42" if psiko_prev>=65 else "#d4900a" if psiko_prev>=45 else "#c0392b"
+            st.markdown(prog_bar_html(f"🧠 Kesiapan Mental",psiko_prev,pc_color), unsafe_allow_html=True)
+        with col_p2:
+            kc_color = "#148a42" if konsist_prev>=65 else "#d4900a" if konsist_prev>=45 else "#c0392b"
+            st.markdown(prog_bar_html(f"📚 Konsistensi Belajar",konsist_prev,kc_color), unsafe_allow_html=True)
+        with col_p3:
+            sc_color = "#148a42" if stab_prev>=65 else "#d4900a" if stab_prev>=45 else "#c0392b"
+            st.markdown(prog_bar_html(f"⚖️ Stabilitas Mental",stab_prev,sc_color), unsafe_allow_html=True)
+
         col1,_,col3=st.columns(3)
         with col1:
-            if st.button("← Kembali",key="btn_s3_back"): st.session_state.step=2; st.rerun()
+            if st.button("← Kembali",key="btn_s2_back"): st.session_state.step=1; st.rerun()
         with col3:
-            if st.button("🚀 Analisis Sekarang!",type="primary",use_container_width=True,key="btn_s3_next"):
+            if st.button("🚀 Analisis Sekarang!",type="primary",use_container_width=True,key="btn_s2_next"):
                 d.update({"jam_hari":jam_hari,"hari_minggu":hari_minggu,"tryout_count":tryout_count,
                           "fokus":fokus,"anxiety":anxiety,"motivasi":motivasi,"durasi_utbk":durasi_utbk})
                 st.session_state.result=run_analysis(d)
                 st.session_state.page="result"; st.rerun()
 
+
 # ══════════════════════════════════════════════════════════
 # ANALYSIS ENGINE
 # ══════════════════════════════════════════════════════════
-def run_analysis(d:dict)->dict:
-    scores=d.get("scores",{}); jurusan=d.get("jurusan","Teknik Informatika"); ptn=d.get("ptn","Universitas Indonesia")
-    skor_w=hitung_skor_weighted(scores,jurusan)
-    mn,mx=get_target_range(ptn,jurusan); mid=(mn+mx)/2
-    status,badge_cls,icon=get_status(skor_w,mn,mx)
-    bobot=get_bobot(jurusan)
-    sa={}
+def build_alternatif_diff_ptn(jurusan, skor_w, ptn_asli, limit=8):
+    """Cari jurusan yang sama di PTN lain yang realistis (status Aman/Batas Aman)"""
+    results = []
+    for p in DAFTAR_PTN:
+        if p == ptn_asli: continue
+        mn_p, mx_p = get_target_range(p, jurusan)
+        st_p, _, ic_p = get_status(skor_w, mn_p, mx_p)
+        kl_p, kl_lbl_p = get_klaster_ptn(p)
+        if st_p in ("Sangat Aman","Aman","Batas Aman"):
+            results.append({
+                "jurusan": jurusan, "ptn": p, "mn": mn_p, "mx": mx_p,
+                "status": st_p, "icon": ic_p, "kl_lbl": kl_lbl_p, "kl": kl_p
+            })
+    # Sort: Sangat Aman > Aman > Batas Aman, kemudian klaster tertinggi (terbaik)
+    order = {"Sangat Aman":0,"Aman":1,"Batas Aman":2}
+    results.sort(key=lambda x: (order.get(x["status"],9), x["kl"]))
+    return results[:limit]
+
+def build_alternatif_same_ptn(jurusan, ptn, skor_w):
+    """Jurusan alternatif di PTN yang sama"""
+    return ALTERNATIF_MAP.get(jurusan, [])
+
+def run_analysis(d: dict) -> dict:
+    scores = d.get("scores", {}); jurusan = d.get("jurusan","Teknik Informatika"); ptn = d.get("ptn","Universitas Indonesia")
+    skor_w = hitung_skor_weighted(scores, jurusan)
+    mn, mx = get_target_range(ptn, jurusan); mid = (mn+mx)/2
+    status, badge_cls, icon = get_status(skor_w, mn, mx)
+    bobot = get_bobot(jurusan)
+    sa = {}
     for s in SUBTES:
-        sc=scores.get(s,500); w=bobot[s]; kontribusi=sc*w
-        level="Unggul" if sc>=750 else "Baik" if sc>=650 else "Cukup" if sc>=550 else "Perlu Ditingkatkan" if sc>=450 else "Lemah"
-        sa[s]={"skor":sc,"bobot":w,"kontribusi":kontribusi,"level":level}
-    sorted_s=sorted(sa.items(),key=lambda x:x[1]["kontribusi"])
-    weak_2=[s for s,_ in sorted_s[:2]]; strong_2=[s for s,_ in sorted_s[-2:]]
+        sc = scores.get(s,500); w = bobot[s]; kontribusi = sc*w
+        level = "Unggul" if sc>=750 else "Baik" if sc>=650 else "Cukup" if sc>=550 else "Perlu Ditingkatkan" if sc>=450 else "Lemah"
+        sa[s] = {"skor":sc,"bobot":w,"kontribusi":kontribusi,"level":level}
+    sorted_s = sorted(sa.items(), key=lambda x: x[1]["kontribusi"])
+    weak_2 = [s for s,_ in sorted_s[:2]]; strong_2 = [s for s,_ in sorted_s[-2:]]
+
+    # Psikologis
+    fokus = d.get("fokus","Tinggi"); anxiety = d.get("anxiety","Sedang"); motivasi = d.get("motivasi","Tinggi")
+    jam_hari = d.get("jam_hari",4); hari_minggu = d.get("hari_minggu",5)
+    tryout_count = d.get("tryout_count",3); durasi_utbk = d.get("durasi_utbk","3-4 bulan")
+
+    psiko = hitung_psiko(fokus, anxiety, motivasi)
+    konsist = hitung_konsistensi(jam_hari, hari_minggu, tryout_count, durasi_utbk)
+    stab = hitung_stabilitas(fokus, anxiety, motivasi)
+    risiko = hitung_risiko(stab, konsist)
+    ppct = hitung_peluang_pct(skor_w, mn, mx)
+
+    # Alternatif
+    alt_same = build_alternatif_same_ptn(jurusan, ptn, skor_w)
+    alt_diff  = build_alternatif_diff_ptn(jurusan, skor_w, ptn)
+
+    plan = gen_plan(d, weak_2, mn-skor_w, sa)
+    rekom = gen_rekom(d, sa, weak_2, strong_2, mn-skor_w)
+
     return {
         "nama":d.get("nama",""),"ptn":ptn,"jurusan":jurusan,"skor_weighted":skor_w,
         "scores":scores,"mn":mn,"mx":mx,"mid":mid,"status":status,"badge_cls":badge_cls,"icon":icon,
         "gap":mn-skor_w,"subtes_analysis":sa,"bobot":bobot,"weak_2":weak_2,"strong_2":strong_2,
-        "alternatif":ALTERNATIF_MAP.get(jurusan,[]),
-        "plan":gen_plan(d,weak_2,mn-skor_w),
-        "rekom":gen_rekom(d,sa,weak_2,strong_2,mn-skor_w),
-        "klaster":get_klaster_ptn(ptn),"profil":d,
+        "alternatif":alt_same,"alternatif_same_ptn":alt_same,"alternatif_diff_ptn":alt_diff,
+        "plan":plan,"rekom":rekom,"klaster":get_klaster_ptn(ptn),"profil":d,
+        "psiko_score":psiko,"konsist_score":konsist,"stab_score":stab,"risiko":risiko,"peluang_pct":ppct,
     }
 
-def gen_plan(d,weak_2,gap):
-    dur=d.get("durasi_utbk","3-4 bulan")
-    wn=[SUBTES_FULL[s] for s in weak_2]
-    if dur in ["< 1 bulan","1-2 bulan"]:
-        return [("Minggu 1-2","Intensif Subtes Lemah",f"Fokus {wn[0]}: latihan soal intensif 2 jam/hari + review materi"),
-                ("Minggu 3","Simulasi Full",f"Tryout lengkap + koreksi {wn[1]}: target naik 30-50 poin"),
-                ("Minggu 4","Pemantapan","Review semua subtes, simulasi kondisi ujian, istirahat cukup")]
-    return [("Minggu 1-2","Diagnosis & Fondasi",f"Tryout awal, pelajari pola soal {wn[0]} dan {wn[1]}"),
-            ("Minggu 3-4",f"Intensif {wn[0]}",f"Latihan {wn[0]} 1.5 jam/hari, review materi terkait"),
-            ("Minggu 5-6",f"Intensif {wn[1]}",f"Latihan {wn[1]} 1.5 jam/hari + pembahasan soal tahun lalu"),
-            ("Minggu 7","Simulasi & Review","Tryout full 2x seminggu, analisis kesalahan, perkuat subtes lain"),
-            ("Minggu 8","Pemantapan Final","Tryout final, manajemen waktu ujian, jaga kondisi fisik & mental")]
+def gen_plan(d, weak_2, gap, sa):
+    dur = d.get("durasi_utbk","3-4 bulan")
+    jam = d.get("jam_hari",4)
+    wn = [SUBTES_FULL[s] for s in weak_2]
+    ws = [sa[s]["skor"] for s in weak_2]
 
-def gen_rekom(d,sa,weak_2,strong_2,gap):
-    items=[]
-    sn=" dan ".join([SUBTES_FULL[s] for s in strong_2])
+    # Jam belajar label
+    jam_lbl = f"{max(2,jam)} jam/hari" if jam >= 2 else "1-2 jam/hari (tingkatkan!)"
+
+    if dur in ["< 1 bulan","1-2 bulan"]:
+        return [
+            {"period":"Minggu 1","fase":"Fondasi","target":"Identifikasi gap & pola soal",
+             "jam": jam_lbl,
+             "tasks":[
+                f"Tryout diagnostic lengkap (150 soal, 2.5 jam) — catat waktu per subtes",
+                f"Review mendalam {wn[0]} (skor {ws[0]:.0f}): pelajari tipe soal yang sering salah",
+                f"Review mendalam {wn[1]} (skor {ws[1]:.0f}): buat pola kesalahan",
+                "Buat error log: catat setiap soal salah + alasan kesalahan",
+                "Target: pahami 80% tipe soal yang sering muncul di UTBK",
+             ]},
+            {"period":"Minggu 2","fase":"Intensif","target":f"Fokus {wn[0]} +30 poin",
+             "jam": jam_lbl,
+             "tasks":[
+                f"100 soal {wn[0]} per hari dengan timer ketat (per soal ≤90 detik)",
+                f"Review error log {wn[0]} — identifikasi pola kesalahan berulang",
+                "Mini tryout: 50 soal campuran (30 menit) — ukur perkembangan",
+                f"Latihan {wn[1]}: 50 soal, fokus pola soal yang sering muncul",
+                "Akhir minggu: bandingkan skor dengan baseline Minggu 1",
+             ]},
+            {"period":"Minggu 3","fase":"Simulasi Full","target":"Simulasi kondisi ujian nyata",
+             "jam": jam_lbl,
+             "tasks":[
+                "Tryout full 1 paket (150 soal, 195 menit) — simulasi kondisi ujian",
+                f"Analisis mendalam: fokus subtes {wn[0]} dan {wn[1]}",
+                "Review semua soal salah — cari pola sistematis",
+                "Latihan manajemen waktu: berapa soal per menit untuk tiap subtes",
+                "Evaluasi: hitung proyeksi skor tertimbang",
+             ]},
+            {"period":"Minggu 4","fase":"Final","target":"Pemantapan & persiapan mental",
+             "jam":"1-2 jam/hari (mode ringan)",
+             "tasks":[
+                "Tryout final — ukur pencapaian dari baseline",
+                "Hanya review materi ringkasan, jangan belajar konsep baru",
+                "Simulasi logistik ujian: rute ke lokasi, jam tidur, sarapan",
+                "Teknik relaksasi: pernapasan 4-7-8 tiap pagi",
+                "Jaga kondisi fisik: tidur 8 jam, hindari begadang",
+             ]},
+        ]
+    else:
+        weeks_count = {"3-4 bulan":8,"5-6 bulan":8,"6+ bulan":8}.get(dur,8)
+        return [
+            {"period":"Minggu 1-2","fase":"Fondasi","target":"Diagnosis & membangun fondasi",
+             "jam": jam_lbl,
+             "tasks":[
+                "Tryout diagnostic: 150 soal, catat waktu & akurasi per subtes",
+                f"Identifikasi pola soal {wn[0]} (skor {ws[0]:.0f}) — beli/download bank soal UTBK",
+                f"Pelajari konsep dasar {wn[1]} (skor {ws[1]:.0f}) — mulai dari materi SMA",
+                "Buat jadwal belajar harian: alokasi waktu per subtes sesuai bobot",
+                f"Error log: catat semua soal salah beserta kategori materi",
+                "Target akhir: pahami 70% tipe soal semua subtes",
+             ]},
+            {"period":"Minggu 3-4","fase":"Intensif","target":f"Intensif {wn[0]} — target +40 poin",
+             "jam": jam_lbl,
+             "tasks":[
+                f"100 soal {wn[0]} per hari — fokus kecepatan & akurasi",
+                f"Review error log {wn[0]}: catat materi yang masih lemah",
+                "Mini tryout {wn[0]}: 50 soal, 45 menit — ukur progress",
+                f"Maintenance {wn[1]}: 30 soal/hari agar tidak melemah",
+                "Latihan soal UTBK 2022-2024 original — analisis pola soal",
+                "Akhir Minggu 4: tryout lengkap, evaluasi apakah target tercapai",
+             ]},
+            {"period":"Minggu 5-6","fase":"Intensif","target":f"Intensif {wn[1]} — target +40 poin",
+             "jam": jam_lbl,
+             "tasks":[
+                f"100 soal {wn[1]} per hari — variasikan sumber soal",
+                f"Review & perkuat {wn[1]}: fokus subtopik yang paling sering salah",
+                "Latihan soal {wn[1]} dari buku OSK/seleksi — tingkatkan level",
+                f"Maintenance {wn[0]}: 30 soal/hari — pertahankan skor",
+                "Mini tryout campuran: 80 soal, 90 menit",
+                "Akhir Minggu 6: tryout lengkap — hitung proyeksi skor tertimbang",
+             ]},
+            {"period":"Minggu 7","fase":"Pemantapan","target":"Simulasi & review menyeluruh",
+             "jam": jam_lbl,
+             "tasks":[
+                "Tryout full 2x (Senin & Kamis) — simulasi kondisi ujian nyata",
+                "Review semua subtes: fokus soal yang masih sering salah",
+                "Analisis pola kesalahan: apakah karena konsep, kecerobohan, atau waktu",
+                "Latihan manajemen waktu ujian — kembangkan strategi urutan pengerjaan",
+                "Review error log keseluruhan — buat ringkasan materi kritis",
+             ]},
+            {"period":"Minggu 8","fase":"Final","target":"Pemantapan mental & fisik",
+             "jam":"2 jam/hari (mode ringan)",
+             "tasks":[
+                "Tryout final Senin — evaluasi pencapaian keseluruhan",
+                "Review ringan: hanya baca catatan ringkasan, tidak belajar konsep baru",
+                "Simulasi H-3 ujian: tidur jam 10 malam, bangun jam 5 pagi",
+                "Teknik relaksasi: meditasi/pernapasan 4-7-8 tiap pagi & malam",
+                "Jaga fisik: tidur 8 jam, makan bergizi, olahraga ringan 30 menit/hari",
+             ]},
+        ]
+
+def gen_rekom(d, sa, weak_2, strong_2, gap):
+    items = []
+    sn = " dan ".join([SUBTES_FULL[s] for s in strong_2])
     items.append(("strength",f"Kekuatan utama: {sn}",
-        [f"Pertahankan konsistensi pada {sn}","Jadikan subtes ini anchor skor tertinggi",
-         "Fokus ke soal level advanced untuk memaksimalkan poin"]))
+        [f"Pertahankan konsistensi pada {sn}",
+         "Jadikan subtes ini anchor skor tertinggi",
+         "Fokus ke soal level advanced untuk memaksimalkan poin",
+         "Tryout minimal 1x/minggu untuk menjaga ketajaman"]))
     for w in weak_2:
+        target_naik = min(60, max(20, 750-sa[w]["skor"]))//10*10
         items.append(("weakness",f"Perlu ditingkatkan: {SUBTES_FULL[w]} (skor: {sa[w]['skor']:.0f})",
-            [f"Alokasikan minimum 90 menit/hari untuk {SUBTES_FULL[w]}","Gunakan bank soal UTBK 2022-2024",
-             f"Target kenaikan: +{min(50,max(20,800-sa[w]['skor']))//10*10} poin dalam 4 minggu"]))
+            [f"Alokasikan minimum 90 menit/hari khusus untuk {SUBTES_FULL[w]}",
+             "Gunakan bank soal UTBK 2022-2024 original",
+             f"Target kenaikan: +{target_naik} poin dalam 4 minggu",
+             "Review setiap soal salah — jangan hanya lihat kunci jawaban"]))
     if gap > 0:
         items.append(("danger",f"Gap ke nilai aman: {gap:.0f} poin",
             [f"Butuh peningkatan rata-rata ~{gap/7:.0f} poin per subtes",
-             "Perbanyak tryout minimal 2x seminggu","Pastikan jam belajar konsisten"]))
+             "Perbanyak tryout minimal 2x seminggu",
+             "Analisis mendalam setiap hasil tryout",
+             "Pertimbangkan bimbingan intensif atau kelompok belajar"]))
     else:
         items.append(("success",f"Sudah melampaui nilai minimum aman ({-gap:.0f} poin di atas batas bawah)",
-            ["Pertahankan konsistensi belajar","Targetkan nilai tengah atau maksimum",
-             "Jangan lengah — persaingan UTBK sangat ketat"]))
-    if d.get("anxiety","Sedang") in ["Tinggi","Sangat Tinggi"]:
+            ["Pertahankan konsistensi belajar",
+             "Targetkan nilai tengah atau nilai maksimum",
+             "Jangan lengah — persaingan UTBK sangat ketat",
+             "Fokus pada manajemen waktu dan kondisi mental"]))
+    anxiety = d.get("anxiety","Sedang")
+    motivasi = d.get("motivasi","Tinggi")
+    if anxiety in ["Tinggi","Sangat Tinggi"]:
         items.append(("info","Manajemen Kecemasan Ujian",
-            ["Latihan teknik pernapasan 4-7-8 sebelum ujian",
-             "Simulasi kondisi ujian 1x/minggu","Fokus ke proses belajar, bukan hanya hasil"]))
+            ["Latihan teknik pernapasan 4-7-8: tarik 4 detik, tahan 7, buang 8",
+             "Simulasi kondisi ujian 1x/minggu (timer, meja belajar yang sama)",
+             "Fokus ke proses belajar, bukan hanya hasil akhir",
+             "Bicara dengan mentor/orang tua jika kecemasan berlebihan"]))
+    if motivasi in ["Rendah","Sedang"]:
+        items.append(("info","Tingkatkan Motivasi Belajar",
+            ["Visualisasikan diri berhasil masuk PTN impian setiap pagi",
+             "Buat target harian kecil yang terukur dan rayakan tiap pencapaian",
+             "Bergabung kelompok belajar — motivasi kolektif lebih kuat",
+             "Ingat alasan mengapa kamu memilih PTN & jurusan ini"]))
     return items
 
+
 # ══════════════════════════════════════════════════════════
-# PAGE RESULT
+# PAGE: RESULT
 # ══════════════════════════════════════════════════════════
 def page_result():
     render_topbar(3)
-    r=st.session_state.result
+    r = st.session_state.result
     if not r: st.warning("Data tidak ditemukan."); return
 
     nama=r["nama"]; ptn=r["ptn"]; jurusan=r["jurusan"]
@@ -2457,7 +2986,11 @@ def page_result():
     status=r["status"]; icon=r["icon"]; gap=r["gap"]
     scores=r["scores"]; sa=r["subtes_analysis"]; bobot=r["bobot"]
     kl,kl_lbl=r["klaster"]
+    psiko=r.get("psiko_score",0); konsist=r.get("konsist_score",0); stab=r.get("stab_score",0)
+    risiko_lbl,risiko_icon,risiko_desc=r.get("risiko",("Sedang","⚠️","—"))
+    ppct=r.get("peluang_pct",50)
 
+    # HERO
     st.markdown(f"""<div class="hero">
     <div class="hero-badge">📊 Hasil Analisis SKORIA v4.0</div>
     <h1>Halo, <span>{nama}</span>! 🎯</h1>
@@ -2465,22 +2998,34 @@ def page_result():
     Estimasi Nilai Aman: <b>{mn}–{mx}</b> | Nilai Tengah: <b>{mid:.0f}</b></p>
     </div>""", unsafe_allow_html=True)
 
+    # KPI ROW — 5 kartu (termasuk risiko & peluang seperti uploaded app.py)
     gap_color="c-green" if gap<=0 else "c-red"
     gap_disp=f"+{-gap:.0f}" if gap<0 else f"-{gap:.0f}"
+    pc_color="c-green" if ppct>=65 else "c-orange" if ppct>=45 else "c-red"
+    risiko_color="c-green" if risiko_lbl=="Rendah" else "c-orange" if risiko_lbl=="Sedang" else "c-red"
     pct=round((skor-mn)/(mx-mn)*100) if mx!=mn else 0
 
-    c1,c2,c3,c4=st.columns(4)
-    with c1: st.markdown(f'<div class="card"><div class="kpi-lbl">Skor Weighted</div><div class="kpi-val c-blue">{skor:.0f}</div><div class="kpi-sub">dari maks 1000</div></div>', unsafe_allow_html=True)
-    with c2: st.markdown(f'<div class="card"><div class="kpi-lbl">Status</div><div class="kpi-val" style="font-size:1.15rem">{icon} {status}</div><div class="kpi-sub">vs target {ptn[:18]}...</div></div>', unsafe_allow_html=True)
-    with c3: st.markdown(f'<div class="card"><div class="kpi-lbl">Gap Nilai Aman</div><div class="kpi-val {gap_color}">{gap_disp}</div><div class="kpi-sub">{"✓ Di atas minimum" if gap<=0 else "Masih perlu ditingkatkan"}</div></div>', unsafe_allow_html=True)
-    with c4: st.markdown(f'<div class="card"><div class="kpi-lbl">Posisi dalam Range</div><div class="kpi-val c-purple">{min(100,max(0,pct))}%</div><div class="kpi-sub">dalam rentang {mn}–{mx}</div></div>', unsafe_allow_html=True)
+    c1,c2,c3,c4,c5=st.columns(5)
+    with c1: st.markdown(f'<div class="card"><div class="kpi-lbl">Skor Tertimbang</div><div class="kpi-val c-blue">{skor:.0f}</div><div class="kpi-sub">dari maks 1000</div></div>',unsafe_allow_html=True)
+    with c2: st.markdown(f'<div class="card"><div class="kpi-lbl">Peluang Lolos</div><div class="kpi-val {pc_color}">{ppct:.0f}%</div><div class="kpi-sub">{status}</div></div>',unsafe_allow_html=True)
+    with c3: st.markdown(f'<div class="card"><div class="kpi-lbl">Gap Nilai Aman</div><div class="kpi-val {gap_color}">{gap_disp}</div><div class="kpi-sub">{"✓ Di atas minimum" if gap<=0 else "Perlu ditingkatkan"}</div></div>',unsafe_allow_html=True)
+    with c4: st.markdown(f'<div class="card"><div class="kpi-lbl">Posisi dalam Range</div><div class="kpi-val c-purple">{min(100,max(0,pct))}%</div><div class="kpi-sub">rentang {mn}–{mx}</div></div>',unsafe_allow_html=True)
+    with c5: st.markdown(f'<div class="card"><div class="kpi-lbl">Risiko Underperform</div><div class="kpi-val {risiko_color}" style="font-size:1.2rem">{risiko_icon} {risiko_lbl}</div><div class="kpi-sub">{risiko_desc[:35]}...</div></div>',unsafe_allow_html=True)
 
     st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
 
-    tab1,tab2,tab3,tab4=st.tabs(["📊 Skor & Subtes","🎯 Analisis Target","💡 Rekomendasi","📅 Study Plan"])
+    # TABS
+    tab1,tab2,tab3,tab4,tab5 = st.tabs([
+        "📊 Skor & Subtes",
+        "🎯 Analisis Target",
+        "💡 Rekomendasi & Psikologis",
+        "📅 Study Plan Detail",
+        "📄 Download PDF"
+    ])
 
+    # ─── TAB 1: SKOR & SUBTES
     with tab1:
-        c1,c2=st.columns(2)
+        c1,c2 = st.columns(2)
         with c1:
             st.markdown('<div class="sec">📊 Profil Skor Per Subtes</div>', unsafe_allow_html=True)
             for s in SUBTES:
@@ -2493,37 +3038,58 @@ def page_result():
             fig.add_trace(go.Scatterpolar(r=vals+[vals[0]],theta=SUBTES+[SUBTES[0]],fill="toself",name="Skor Kamu",
                 line=dict(color="#3464c8",width=2.5),fillcolor="rgba(52,100,200,.15)"))
             fig.add_trace(go.Scatterpolar(r=[mn]*len(SUBTES)+[mn],theta=SUBTES+[SUBTES[0]],mode="lines",
-                name=f"Min ({mn})",line=dict(color="#d4900a",width=1.5,dash="dot")))
+                name=f"Min Aman ({mn})",line=dict(color="#d4900a",width=1.5,dash="dot")))
             fig.update_layout(polar=dict(radialaxis=dict(range=[200,1000])),showlegend=True,
                 margin=dict(t=30,b=30,l=30,r=30),height=350,
                 paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(family="Plus Jakarta Sans"))
             st.plotly_chart(fig,use_container_width=True,key="chart_radar")
-        st.markdown(f'<div class="sec">⚖️ Bobot Subtes untuk {jurusan}</div>', unsafe_allow_html=True)
+
+        st.markdown(f'<div class="sec">⚖️ Bobot Subtes — {jurusan}</div>', unsafe_allow_html=True)
         df=pd.DataFrame([{"Subtes":s,"Nama":SUBTES_FULL[s],"Bobot":f"{bobot[s]*100:.0f}%",
             "Skor":scores.get(s,500),"Kontribusi":f"{sa[s]['kontribusi']:.1f}","Level":sa[s]["level"]}
             for s in SUBTES])
         st.dataframe(df,use_container_width=True,hide_index=True)
 
+    # ─── TAB 2: ANALISIS TARGET
     with tab2:
         c1,c2=st.columns(2)
         with c1:
             st.markdown('<div class="sec">🎯 Posisi Skor vs Target</div>', unsafe_allow_html=True)
             fig2=go.Figure()
             fig2.add_trace(go.Bar(name="Skor Kamu",x=["Skor"],y=[skor],marker_color="#3464c8",text=[f"{skor:.0f}"],textposition="outside"))
-            fig2.add_trace(go.Bar(name="Nilai Min",x=["Min Aman"],y=[mn],marker_color="#d4900a",text=[str(mn)],textposition="outside"))
-            fig2.add_trace(go.Bar(name="Nilai Max",x=["Max Aman"],y=[mx],marker_color="#148a42",text=[str(mx)],textposition="outside"))
+            fig2.add_trace(go.Bar(name="Min Aman",x=["Min Aman"],y=[mn],marker_color="#d4900a",text=[str(mn)],textposition="outside"))
+            fig2.add_trace(go.Bar(name="Max Aman",x=["Max Aman"],y=[mx],marker_color="#148a42",text=[str(mx)],textposition="outside"))
             fig2.update_layout(height=300,margin=dict(t=20,b=20,l=20,r=20),
                 paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(family="Plus Jakarta Sans"),yaxis=dict(range=[0,1050]))
             st.plotly_chart(fig2,use_container_width=True,key="chart_bar")
         with c2:
-            st.markdown('<div class="sec">🔄 Jurusan Alternatif di PTN Sama</div>', unsafe_allow_html=True)
-            for a in r["alternatif"]:
+            st.markdown('<div class="sec">🔄 Alternatif Jurusan di PTN Sama</div>', unsafe_allow_html=True)
+            for a in r["alternatif_same_ptn"]:
                 mn_a,mx_a=get_target_range(ptn,a)
                 st_a,_,ic_a=get_status(skor,mn_a,mx_a)
-                st.markdown(f'<div class="card" style="margin-bottom:.6rem"><b>{ic_a} {a}</b><br><small style="color:#6a7a9a">Nilai Aman: {mn_a}–{mx_a} | {st_a}</small></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sec">🏫 Semua PTN — Jurusan Sama</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card" style="margin-bottom:.6rem"><b>{ic_a} {a}</b><br><small style="color:#6a7a9a">Nilai Aman {ptn[:20]}...: {mn_a}–{mx_a} | {st_a}</small></div>',unsafe_allow_html=True)
+
+        # Alternatif PTN lain — REALISTIS
+        st.markdown('<div class="sec">🏫 Alternatif PTN Lain yang Realistis (Jurusan Sama)</div>', unsafe_allow_html=True)
+        alt_diff = r.get("alternatif_diff_ptn",[])
+        if alt_diff:
+            st.markdown("""<div class="al al-i"><h4>ℹ️ Rekomendasi PTN Alternatif</h4>
+            Daftar PTN lain dengan jurusan yang sama di mana skormu sudah <b>Aman</b> atau <b>Batas Aman</b>.
+            Diurutkan dari yang paling realistis dicapai.</div>""", unsafe_allow_html=True)
+            alt_rows=[]
+            for item in alt_diff:
+                alt_rows.append({"PTN":item["ptn"],"Klaster":item["kl_lbl"],
+                    "Min":item["mn"],"Max":item["mx"],
+                    "Status":f"{item['icon']} {item['status']}"})
+            st.dataframe(pd.DataFrame(alt_rows),use_container_width=True,hide_index=True)
+        else:
+            st.markdown("""<div class="al al-w"><h4>⚠️ Belum Ada PTN Alternatif Realistis</h4>
+            Skor saat ini belum mencapai zona aman di PTN lain untuk jurusan yang sama.
+            Tingkatkan skor atau pertimbangkan jurusan alternatif.</div>""", unsafe_allow_html=True)
+
+        st.markdown('<div class="sec">🏛️ Semua PTN — Jurusan Sama</div>', unsafe_allow_html=True)
         rows=[]
         for p in DAFTAR_PTN:
             mn_p,mx_p=get_target_range(p,jurusan)
@@ -2532,31 +3098,178 @@ def page_result():
             rows.append({"PTN":p,"Klaster":kl_lbl_p,"Min":mn_p,"Max":mx_p,"Status":f"{ic_p} {st_p}"})
         st.dataframe(pd.DataFrame(rows),use_container_width=True,hide_index=True)
 
+    # ─── TAB 3: REKOMENDASI & PSIKOLOGIS
     with tab3:
+        # Indikator psikologis
+        st.markdown('<div class="sec">🧠 Indikator Psikologis & Konsistensi</div>', unsafe_allow_html=True)
+        c1,c2,c3=st.columns(3)
+        with c1:
+            pc_c="#148a42" if psiko>=65 else "#d4900a" if psiko>=45 else "#c0392b"
+            st.markdown(prog_bar_html("🧠 Kesiapan Mental",psiko,pc_c),unsafe_allow_html=True)
+            st.markdown(f'<div class="al {"al-s" if psiko>=65 else "al-w" if psiko>=45 else "al-d"}" style="padding:.7rem 1rem"><h4>{"✅ Baik" if psiko>=65 else "⚠️ Perlu Perhatian" if psiko>=45 else "🔴 Perlu Ditingkatkan"}</h4>{psiko:.0f}/100 — Kombinasi fokus, motivasi, dan kecemasan.</div>',unsafe_allow_html=True)
+        with c2:
+            kc_c="#148a42" if konsist>=65 else "#d4900a" if konsist>=45 else "#c0392b"
+            st.markdown(prog_bar_html("📚 Konsistensi Belajar",konsist,kc_c),unsafe_allow_html=True)
+            st.markdown(f'<div class="al {"al-s" if konsist>=65 else "al-w" if konsist>=45 else "al-d"}" style="padding:.7rem 1rem"><h4>{"✅ Konsisten" if konsist>=65 else "⚠️ Cukup Konsisten" if konsist>=45 else "🔴 Perlu Rutin"}</h4>{konsist:.0f}/100 — Frekuensi dan durasi belajar.</div>',unsafe_allow_html=True)
+        with c3:
+            sc_c="#148a42" if stab>=65 else "#d4900a" if stab>=45 else "#c0392b"
+            st.markdown(prog_bar_html("⚖️ Stabilitas Mental",stab,sc_c),unsafe_allow_html=True)
+            st.markdown(f'<div class="al {"al-s" if stab>=65 else "al-w" if stab>=45 else "al-d"}" style="padding:.7rem 1rem"><h4>{"✅ Stabil" if stab>=65 else "⚠️ Agak Fluktuatif" if stab>=45 else "🔴 Berisiko"}</h4>{stab:.0f}/100 — Kemampuan menjaga performa.</div>',unsafe_allow_html=True)
+
+        # Risiko underperform
+        risiko_cls = "al-s" if risiko_lbl=="Rendah" else "al-w" if risiko_lbl=="Sedang" else "al-d"
+        st.markdown(f'<div class="al {risiko_cls}"><h4>{risiko_icon} Risiko Underperform: {risiko_lbl}</h4>{risiko_desc}</div>',unsafe_allow_html=True)
+
+        # Visualisasi bar chart psikologis
+        fig_psy = go.Figure()
+        fig_psy.add_trace(go.Bar(x=["Kesiapan Mental","Konsistensi Belajar","Stabilitas Mental"],
+            y=[psiko,konsist,stab],
+            marker_color=["#3464c8","#148a42","#6b3fca"],
+            text=[f"{v:.0f}%" for v in [psiko,konsist,stab]],
+            textposition="outside",textfont=dict(size=11,color="#12203f")))
+        fig_psy.add_hline(y=65,line_dash="dot",line_color="#d4900a",line_width=1.5,
+            annotation_text="  Target 65%",annotation_font_color="#d4900a",annotation_font_size=10)
+        fig_psy.update_layout(height=280,margin=dict(t=20,b=20,l=20,r=20),
+            paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Plus Jakarta Sans"),yaxis=dict(range=[0,115],ticksuffix="%",gridcolor="#eef1f5"),
+            xaxis=dict(gridcolor="#dde3ec"))
+        st.plotly_chart(fig_psy,use_container_width=True,key="chart_psiko")
+
+        # Rekomendasi personal
         st.markdown('<div class="sec">💡 Rekomendasi Personal</div>', unsafe_allow_html=True)
         cls_map={"strength":"al-s","weakness":"al-w","danger":"al-d","info":"al-i","success":"al-s"}
         icon_map={"strength":"✅","weakness":"⚠️","danger":"🔴","info":"ℹ️","success":"🎉"}
         for kind,title,pts in r["rekom"]:
             pts_html="".join(f"<li>{p}</li>" for p in pts)
-            al_cls = cls_map.get(kind, "al-i")
-            al_icon = icon_map.get(kind, "💡")
-            st.markdown(f'<div class="al {al_cls}"><h4>{al_icon} {title}</h4><ul>{pts_html}</ul></div>', unsafe_allow_html=True)
+            al_cls=cls_map.get(kind,"al-i"); al_icon=icon_map.get(kind,"💡")
+            st.markdown(f'<div class="al {al_cls}"><h4>{al_icon} {title}</h4><ul>{pts_html}</ul></div>',unsafe_allow_html=True)
 
+    # ─── TAB 4: STUDY PLAN DETAIL
     with tab4:
-        st.markdown('<div class="sec">📅 Rencana Belajar</div>', unsafe_allow_html=True)
-        for period,target,tasks in r["plan"]:
-            st.markdown(f'<div class="week-card"><div class="week-num">⏱ {period}</div><div class="week-target">🎯 {target}</div><div class="week-tasks">{tasks}</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec">📅 Study Plan Detail Per Minggu</div>', unsafe_allow_html=True)
+
+        plan = r["plan"]
+        durasi = r.get("profil",{}).get("durasi_utbk","3-4 bulan")
+
+        # Info banner
+        skor_w = r["skor_weighted"]; mn_v = r["mn"]; mx_v = r["mx"]
+        target_total = mx_v - skor_w
+        st.markdown(f"""<div class="al al-i">
+        <h4>📋 Ringkasan Study Plan</h4>
+        Skor saat ini: <b>{skor_w:.0f}</b> → Target nilai aman: <b>{mn_v}–{mx_v}</b><br>
+        Gap ke nilai minimum: <b>{mn_v-skor_w:+.0f} poin</b> &nbsp;|&nbsp;
+        Waktu tersisa: <b>{durasi}</b> &nbsp;|&nbsp;
+        Subtes utama untuk diperkuat: <b>{SUBTES_FULL[r['weak_2'][0]]}</b> dan <b>{SUBTES_FULL[r['weak_2'][1]]}</b>
+        </div>""", unsafe_allow_html=True)
+
+        # Proyeksi skor chart
+        target_per_week = max(5, (mn_v - skor_w) / max(len(plan),1) + 8)
+        weeks_x = [0] + list(range(1, len(plan)+1))
+        scores_proj = [skor_w] + [min(mx_v+20, skor_w + target_per_week*i) for i in range(1,len(plan)+1)]
+        fase_labels = ["Start"] + [p["fase"] for p in plan]
+
+        fig_proj = go.Figure()
+        fig_proj.add_hrect(y0=mn_v, y1=mx_v, fillcolor="rgba(20,138,66,.08)", layer="below", line_width=0,
+            annotation_text="  Zona Aman", annotation_position="top right",
+            annotation_font=dict(color="#148a42",size=10))
+        fig_proj.add_trace(go.Scatter(x=weeks_x, y=scores_proj, mode="lines+markers+text",
+            line=dict(color="#3464c8",width=2.5),
+            marker=dict(size=8,color="#3464c8",line=dict(color="#fff",width=1.5)),
+            text=[f"{v:.0f}" for v in scores_proj], textposition="top center",
+            textfont=dict(size=8.5,color="#334466"),name="Proyeksi Skor"))
+        fig_proj.add_hline(y=mn_v,line_dash="dash",line_color="#d4620a",line_width=1.5,
+            annotation_text=f"  Min Aman ({mn_v})",annotation_font_color="#d4620a",annotation_font_size=10)
+        fig_proj.update_layout(height=280,margin=dict(t=20,b=30,l=20,r=20),
+            paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Plus Jakarta Sans"),
+            xaxis=dict(title="Minggu ke-",gridcolor="#eef1f5",tickvals=weeks_x,ticktext=fase_labels,
+                       tickfont=dict(size=8)),
+            yaxis=dict(range=[max(400,skor_w-60),min(1000,mx_v+60)],gridcolor="#eef1f5",title="Proyeksi Skor"),
+            showlegend=False)
+        st.plotly_chart(fig_proj,use_container_width=True,key="chart_proj")
+
+        # Detail per minggu
+        fase_colors = {"Fondasi":"#3464c8","Intensif":"#d4620a","Pemantapan":"#148a42","Final":"#c8890a"}
+        for i,item in enumerate(plan):
+            clr = fase_colors.get(item["fase"],"#6b3fca")
+            tasks_html = "".join(f'<div style="padding:.18rem 0;color:#334466;font-size:.82rem">• {t}</div>' for t in item["tasks"])
+            st.markdown(f"""<div class="week-card" style="border-left:4px solid {clr}">
+            <div class="week-num" style="color:{clr}">⏱ {item['period']} — {item['fase'].upper()}</div>
+            <div class="week-target">🎯 Target: <b style="color:{clr}">{item['target']}</b> &nbsp;|&nbsp; ⏰ {item['jam']}</div>
+            <div class="week-tasks">{tasks_html}</div>
+            </div>""", unsafe_allow_html=True)
+
+    # ─── TAB 5: DOWNLOAD PDF
+    with tab5:
+        st.markdown('<div class="sec">📄 Download Laporan Lengkap (PDF)</div>', unsafe_allow_html=True)
+        st.markdown("""<div class="al al-i">
+        <h4>📋 Isi Laporan PDF</h4>
+        Laporan PDF mencakup seluruh hasil analisis:
+        <ul>
+        <li>📊 Profil skor & bobot 7 subtes TPS</li>
+        <li>🎯 KPI: peluang lolos, gap, risiko underperform</li>
+        <li>🧠 Indikator psikologis & kebiasaan belajar</li>
+        <li>🏫 Rekomendasi jurusan alternatif (PTN sama & PTN lain)</li>
+        <li>💡 Rekomendasi personal & strategi belajar</li>
+        <li>📅 Study plan detail per minggu dengan tugas spesifik</li>
+        </ul>
+        </div>""", unsafe_allow_html=True)
+
+        col1,col2,col3 = st.columns([1,2,1])
+        with col2:
+            if st.button("📄 Generate & Download PDF", type="primary", use_container_width=True, key="btn_pdf"):
+                with st.spinner("Generating PDF..."):
+                    try:
+                        pdf_bytes = generate_pdf_bytes(r)
+                        import base64
+                        b64 = base64.b64encode(pdf_bytes).decode()
+                        fn = f"SKORIA_{nama.replace(' ','_')}_{jurusan.replace(' ','_')}.pdf"
+                        st.markdown(f"""
+                        <div style="text-align:center;margin-top:1rem">
+                        <a href="data:application/pdf;base64,{b64}" download="{fn}"
+                        style="display:inline-block;background:linear-gradient(135deg,#3464c8,#1a3470);
+                               color:#fff;font-weight:700;padding:.8rem 2rem;border-radius:10px;
+                               text-decoration:none;font-size:.95rem;font-family:'Space Grotesk',sans-serif;
+                               box-shadow:0 4px 16px rgba(52,100,200,.4)">
+                        ⬇️ Download {fn}
+                        </a></div>""", unsafe_allow_html=True)
+                        st.success(f"✅ PDF berhasil digenerate! Klik link di atas untuk download.")
+                    except Exception as e:
+                        st.error(f"Gagal generate PDF: {e}")
+
+        # Preview ringkasan
+        st.markdown('<div class="sec">Preview Ringkasan</div>', unsafe_allow_html=True)
+        c1,c2 = st.columns(2)
+        with c1:
+            st.dataframe(pd.DataFrame([
+                {"Info":"Nama","Detail":nama},
+                {"Info":"Jurusan","Detail":jurusan},
+                {"Info":"PTN Target","Detail":ptn},
+                {"Info":"Klaster","Detail":kl_lbl},
+                {"Info":"Skor Tertimbang","Detail":f"{skor:.0f} / 1000"},
+                {"Info":"Gap vs Minimum","Detail":f"{gap:+.0f}"},
+            ]),use_container_width=True,hide_index=True)
+        with c2:
+            st.dataframe(pd.DataFrame([
+                {"Indikator":"Peluang Lolos","Nilai":f"{ppct:.0f}% ({status})"},
+                {"Indikator":"Kesiapan Mental","Nilai":f"{psiko:.0f}/100"},
+                {"Indikator":"Konsistensi Belajar","Nilai":f"{konsist:.0f}/100"},
+                {"Indikator":"Stabilitas Mental","Nilai":f"{stab:.0f}/100"},
+                {"Indikator":"Risiko Underperform","Nilai":f"{risiko_icon} {risiko_lbl}"},
+                {"Indikator":"Jumlah Alternatif PTN","Nilai":str(len(r.get("alternatif_diff_ptn",[])))},
+            ]),use_container_width=True,hide_index=True)
 
     st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
     c1,c2,c3=st.columns(3)
     with c1:
-        if st.button("← Ubah Input",key="btn_r_back"): st.session_state.page="survey"; st.session_state.step=2; st.rerun()
+        if st.button("← Ubah Input",key="btn_r_back"): st.session_state.page="survey"; st.session_state.step=1; st.rerun()
     with c2:
         if st.button("🏠 Beranda",key="btn_r_home"): st.session_state.page="home"; st.rerun()
     with c3:
         if st.button("🔄 Analisis Baru",type="primary",use_container_width=True,key="btn_r_new"):
             st.session_state.data={}; st.session_state.result=None
             st.session_state.page="survey"; st.session_state.step=1; st.rerun()
+
 
 # ══════════════════════════════════════════════════════════
 # MAIN
