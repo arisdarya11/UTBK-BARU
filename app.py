@@ -360,6 +360,32 @@ html,body,[class*="css"],.stApp {
 .sl-a   { background:#edf6ff; color:#1a5fa0; border:1.5px solid #90c0f0; }
 .sl-sa  { background:#e6f5ee; color:#148a42; border:1.5px solid #9adbb8; }
 
+/* ── FITUR PANEL ── */
+.fitur-panel {
+  background:var(--surf); border:1.5px solid var(--border); border-radius:16px;
+  padding:1.8rem 2rem; margin-bottom:1.6rem; box-shadow:var(--sh);
+  animation:fadeSlideUp .6s ease both;
+  position:relative; overflow:hidden;
+}
+.fitur-panel::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:4px;
+  background:linear-gradient(90deg,var(--accent),var(--purple),var(--teal));
+  animation:gradientFlow 4s linear infinite; background-size:300% auto;
+}
+.fitur-panel-title {
+  font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:800;
+  color:var(--text); margin-bottom:1.1rem; display:flex; align-items:center; gap:.5rem;
+}
+.fitur-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:.9rem; }
+.fitur-item {
+  background:var(--surf2); border:1px solid var(--border); border-radius:12px;
+  padding:1rem 1.1rem; transition:all .25s ease; animation:fadeSlideUp .5s ease both;
+}
+.fitur-item:hover { background:#eef2fc; border-color:var(--a2); transform:translateY(-3px); box-shadow:var(--sh2); }
+.fitur-item-icon { font-size:1.6rem; margin-bottom:.4rem; display:block; }
+.fitur-item-title { font-family:'Space Grotesk',sans-serif; font-size:.82rem; font-weight:700; color:var(--text); margin-bottom:.3rem; }
+.fitur-item-desc { font-size:.73rem; color:var(--text3); line-height:1.6; }
+
 div[data-testid="stButton"] button[kind="primary"] {
   background:linear-gradient(135deg,var(--accent),#1a3470) !important;
   color:#fff !important; font-weight:700 !important; font-family:'Space Grotesk',sans-serif !important;
@@ -444,14 +470,10 @@ SUBTES_CLR = {
 DAFTAR_JENJANG = ["S1 (Sarjana)", "D4 (Sarjana Terapan)", "D3 (Diploma Tiga)"]
 
 # ══════════════════════════════════════════════════════════
-# LOAD DATA DARI XLSX (GitHub-hosted atau lokal)
+# LOAD DATA DARI XLSX
 # ══════════════════════════════════════════════════════════
-
-# URL file xlsx di GitHub (raw content)
 URL_S1  = "https://raw.githubusercontent.com/Skoriaid/skoria-data/main/UTBK_SNBT_Estimasi_30PTN.xlsx"
 URL_D34 = "https://raw.githubusercontent.com/Skoriaid/skoria-data/main/UTBK_SNBT_D3_D4_SaintekSoshum_30PTN.xlsx"
-
-# Path lokal fallback (untuk dev)
 LOCAL_S1  = "UTBK_SNBT_Estimasi_30PTN.xlsx"
 LOCAL_D34 = "UTBK_SNBT_D3_D4_SaintekSoshum_30PTN.xlsx"
 
@@ -469,20 +491,15 @@ def parse_rentang(r):
 
 @st.cache_data(ttl=3600)
 def load_database():
-    """Load database dari xlsx (lokal atau GitHub)."""
     import io
-
     def read_xlsx(source):
         return pd.read_excel(source, sheet_name=None, engine="openpyxl")
-
     def load_file(local_path, url):
-        """Coba baca lokal, fallback ke GitHub raw URL."""
         if os.path.exists(local_path):
             try:
                 return read_xlsx(local_path), None
-            except Exception as e:
-                pass  # fallback ke URL
-        # Download dari GitHub
+            except:
+                pass
         try:
             import urllib.request
             with urllib.request.urlopen(url, timeout=20) as resp:
@@ -494,12 +511,10 @@ def load_database():
     wb_s1, err = load_file(LOCAL_S1, URL_S1)
     if wb_s1 is None:
         return None, None, None, None, f"Gagal load S1: {err}"
-
     wb_d34, err = load_file(LOCAL_D34, URL_D34)
     if wb_d34 is None:
         return None, None, None, None, f"Gagal load D3/D4: {err}"
 
-    # Parse S1
     df_s1 = wb_s1.get("DATA UTBK SNBT ESTIMASI", pd.DataFrame())
     df_s1 = df_s1[df_s1.iloc[:,0].apply(
         lambda x: str(x).isdigit() if pd.notna(x) else False)].copy()
@@ -521,7 +536,6 @@ def load_database():
             ptn_s1[ptn] = {}
         ptn_s1[ptn][prodi] = {'mn': mn, 'mx': mx}
 
-    # Parse D3/D4
     df_d34 = wb_d34.get("DATA D3 D4 ESTIMASI", pd.DataFrame())
     df_d34 = df_d34[df_d34.iloc[:,0].apply(
         lambda x: str(x).isdigit() if pd.notna(x) else False)].copy()
@@ -548,7 +562,6 @@ def load_database():
 
     return ptn_s1, ptn_d3, ptn_d4, df_s1, None
 
-# Load database
 _PTN_S1, _PTN_D3, _PTN_D4, _DF_S1, _DB_ERR = load_database()
 
 def get_db(jenjang="S1 (Sarjana)"):
@@ -571,24 +584,13 @@ def get_skor_info(ptn, prodi, jenjang="S1 (Sarjana)"):
     ptn_data = db.get(ptn, {})
     data = ptn_data.get(prodi, None)
     if data is None:
-        # fallback default
         return {"mn": 600, "mx": 670}
     return data
 
 # ══════════════════════════════════════════════════════════
 # KATEGORI SKOR — 4 Level
 # ══════════════════════════════════════════════════════════
-# Definisi:
-#   Sangat Aman  : skor >= mx
-#   Aman         : mn <= skor < mx
-#   Berisiko     : mn-70 <= skor < mn
-#   Tidak Aman   : skor < mn-70
-
 def get_kategori_skor(sw, mn, mx):
-    """
-    Kembalikan (label, warna_hex, badge_class, icon, persen_peluang)
-    4 kategori: Sangat Aman | Aman | Berisiko | Tidak Aman
-    """
     if sw >= mx:
         return ("Sangat Aman",  "#148a42", "badge-sa", "🏆",
                 min(95.0, 80 + (sw - mx) / max(mx, 1) * 15))
@@ -596,7 +598,7 @@ def get_kategori_skor(sw, mn, mx):
         return ("Aman",         "#1a5fa0", "badge-a",  "✅",
                 60 + (sw - mn) / max(mx - mn, 1) * 18)
     elif sw >= mn - 70:
-        gap = sw - mn  # negatif
+        gap = sw - mn
         return ("Berisiko",     "#e67e22", "badge-br", "⚡",
                 max(20, 35 + gap / 70 * 20))
     else:
@@ -607,7 +609,6 @@ def get_kategori_skor(sw, mn, mx):
 # BOBOT PER JURUSAN
 # ══════════════════════════════════════════════════════════
 BOBOT_KEYWORD = {
-    # --- Teknik & Sains ---
     "Teknik Informatika":    {"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
     "Rekayasa Perangkat Lunak":{"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
     "Teknologi Informasi":   {"PU":.20,"PPU":.05,"PBM":.05,"PK":.20,"LBI":.05,"LBE":.10,"PM":.35},
@@ -643,7 +644,6 @@ BOBOT_KEYWORD = {
     "Penginderaan Jauh":     {"PU":.18,"PPU":.10,"PBM":.08,"PK":.18,"LBI":.08,"LBE":.08,"PM":.30},
     "Logistik":              {"PU":.20,"PPU":.12,"PBM":.14,"PK":.16,"LBI":.14,"LBE":.10,"PM":.14},
     "Supply Chain":          {"PU":.20,"PPU":.12,"PBM":.14,"PK":.16,"LBI":.14,"LBE":.10,"PM":.14},
-    # --- Kedokteran & Kesehatan ---
     "Kedokteran":            {"PU":.20,"PPU":.15,"PBM":.10,"PK":.15,"LBI":.10,"LBE":.10,"PM":.20},
     "Kedokteran Gigi":       {"PU":.20,"PPU":.15,"PBM":.10,"PK":.15,"LBI":.10,"LBE":.10,"PM":.20},
     "Farmasi":               {"PU":.18,"PPU":.12,"PBM":.08,"PK":.18,"LBI":.08,"LBE":.08,"PM":.28},
@@ -658,7 +658,6 @@ BOBOT_KEYWORD = {
     "Analis Kesehatan":      {"PU":.18,"PPU":.13,"PBM":.08,"PK":.18,"LBI":.10,"LBE":.07,"PM":.26},
     "Laboratorium Medis":    {"PU":.18,"PPU":.13,"PBM":.08,"PK":.18,"LBI":.10,"LBE":.07,"PM":.26},
     "Keselamatan Kesehatan": {"PU":.20,"PPU":.13,"PBM":.12,"PK":.12,"LBI":.14,"LBE":.10,"PM":.19},
-    # --- Bisnis & Ekonomi ---
     "Ekonomi":               {"PU":.20,"PPU":.15,"PBM":.10,"PK":.20,"LBI":.10,"LBE":.10,"PM":.15},
     "Manajemen":             {"PU":.20,"PPU":.15,"PBM":.12,"PK":.18,"LBI":.12,"LBE":.10,"PM":.13},
     "Akuntansi":             {"PU":.18,"PPU":.15,"PBM":.10,"PK":.22,"LBI":.10,"LBE":.10,"PM":.15},
@@ -672,7 +671,6 @@ BOBOT_KEYWORD = {
     "Pariwisata":            {"PU":.18,"PPU":.13,"PBM":.18,"PK":.08,"LBI":.18,"LBE":.18,"PM":.07},
     "Perhotelan":            {"PU":.18,"PPU":.12,"PBM":.17,"PK":.08,"LBI":.18,"LBE":.20,"PM":.07},
     "Perjalanan Wisata":     {"PU":.18,"PPU":.12,"PBM":.17,"PK":.08,"LBI":.18,"LBE":.20,"PM":.07},
-    # --- Hukum & Sosial ---
     "Ilmu Hukum":            {"PU":.22,"PPU":.18,"PBM":.20,"PK":.08,"LBI":.18,"LBE":.10,"PM":.04},
     "Psikologi":             {"PU":.22,"PPU":.15,"PBM":.18,"PK":.10,"LBI":.18,"LBE":.10,"PM":.07},
     "Ilmu Komunikasi":       {"PU":.20,"PPU":.15,"PBM":.22,"PK":.08,"LBI":.20,"LBE":.10,"PM":.05},
@@ -684,17 +682,14 @@ BOBOT_KEYWORD = {
     "Sejarah":               {"PU":.20,"PPU":.20,"PBM":.18,"PK":.05,"LBI":.22,"LBE":.10,"PM":.05},
     "Geografi":              {"PU":.20,"PPU":.15,"PBM":.15,"PK":.12,"LBI":.15,"LBE":.08,"PM":.15},
     "Komunikasi":            {"PU":.20,"PPU":.15,"PBM":.22,"PK":.08,"LBI":.20,"LBE":.10,"PM":.05},
-    # --- Bahasa & Pendidikan ---
     "Sastra Inggris":        {"PU":.12,"PPU":.12,"PBM":.20,"PK":.05,"LBI":.15,"LBE":.31,"PM":.05},
     "Bahasa Inggris":        {"PU":.12,"PPU":.12,"PBM":.18,"PK":.05,"LBI":.12,"LBE":.33,"PM":.08},
     "Bahasa Indonesia":      {"PU":.12,"PPU":.12,"PBM":.22,"PK":.05,"LBI":.32,"LBE":.12,"PM":.05},
     "Pendidikan Bahasa Inggris":{"PU":.12,"PPU":.12,"PBM":.18,"PK":.05,"LBI":.12,"LBE":.33,"PM":.08},
     "Pendidikan Bahasa Indonesia":{"PU":.12,"PPU":.12,"PBM":.22,"PK":.05,"LBI":.32,"LBE":.12,"PM":.05},
-    # --- Seni & Desain ---
     "Desain Grafis":         {"PU":.18,"PPU":.10,"PBM":.18,"PK":.12,"LBI":.18,"LBE":.12,"PM":.12},
     "Animasi":               {"PU":.18,"PPU":.10,"PBM":.15,"PK":.15,"LBI":.17,"LBE":.12,"PM":.13},
     "Seni":                  {"PU":.18,"PPU":.12,"PBM":.20,"PK":.08,"LBI":.20,"LBE":.12,"PM":.10},
-    # --- Pertanian ---
     "Agribisnis":            {"PU":.20,"PPU":.15,"PBM":.12,"PK":.15,"LBI":.15,"LBE":.08,"PM":.15},
     "Kehutanan":             {"PU":.20,"PPU":.15,"PBM":.12,"PK":.15,"LBI":.15,"LBE":.08,"PM":.15},
     "Peternakan":            {"PU":.20,"PPU":.15,"PBM":.12,"PK":.14,"LBI":.14,"LBE":.08,"PM":.17},
@@ -702,10 +697,8 @@ BOBOT_KEYWORD = {
 DEFAULT_BOBOT = {"PU":.16,"PPU":.14,"PBM":.14,"PK":.14,"LBI":.14,"LBE":.14,"PM":.14}
 
 def get_bobot(prodi_name):
-    # Exact match
     if prodi_name in BOBOT_KEYWORD:
         return BOBOT_KEYWORD[prodi_name]
-    # Keyword match (nama prodi mengandung keyword)
     prodi_lower = prodi_name.lower()
     best_match = None
     best_len = 0
@@ -800,12 +793,8 @@ def compute(d):
 # ══════════════════════════════════════════════════════════
 
 def get_rekomendasi_alternatif(skor, sw, prodi_target, kampus_target, jenjang, top_n=10):
-    """
-    Kembalikan 2 list rekomendasi:
-    1. alt_kampus_sama  : prodi lain di kampus yang SAMA, diurutkan berdasarkan kategori terbaik
-    2. alt_prodi_sama   : prodi yang SAMA (atau mirip nama) di kampus BERBEDA
-    """
     db = get_db(jenjang)
+    kat_order = {"Sangat Aman": 0, "Aman": 1, "Berisiko": 2, "Tidak Aman": 3}
 
     # ── 1. Prodi lain di kampus yang sama ──
     alt_kampus_sama = []
@@ -817,58 +806,35 @@ def get_rekomendasi_alternatif(skor, sw, prodi_target, kampus_target, jenjang, t
         sw_p    = hitung_tw(skor, bobot_p)
         kat_p, kat_clr_p, badge_p, icon_p, pct_p = get_kategori_skor(sw_p, info["mn"], info["mx"])
         alt_kampus_sama.append({
-            "prodi":       prodi,
-            "kampus":      kampus_target,
-            "mn":          info["mn"],
-            "mx":          info["mx"],
-            "sw":          round(sw_p, 1),
-            "gap":         round(sw_p - info["mn"], 1),
-            "kat":         kat_p,
-            "kat_clr":     kat_clr_p,
-            "badge":       badge_p,
-            "icon":        icon_p,
-            "ppct":        round(pct_p, 1),
+            "prodi": prodi, "kampus": kampus_target,
+            "mn": info["mn"], "mx": info["mx"],
+            "sw": round(sw_p, 1), "gap": round(sw_p - info["mn"], 1),
+            "kat": kat_p, "kat_clr": kat_clr_p,
+            "badge": badge_p, "icon": icon_p, "ppct": round(pct_p, 1),
         })
-
-    # Urutkan: Sangat Aman > Aman > Berisiko > Tidak Aman, lalu gap terbesar
-    kat_order = {"Sangat Aman": 0, "Aman": 1, "Berisiko": 2, "Tidak Aman": 3}
     alt_kampus_sama.sort(key=lambda x: (kat_order.get(x["kat"], 9), -x["gap"]))
     alt_kampus_sama = alt_kampus_sama[:top_n]
 
     # ── 2. Prodi sama / mirip di kampus lain ──
-    # Cari prodi di PTN lain yang namanya sama persis atau mengandung kata kunci prodi target
     prodi_lower = prodi_target.lower()
-    # Ambil kata kunci penting (abaikan prefix D3/D4)
     prodi_clean = prodi_lower.replace("d3 ", "").replace("d4 ", "").strip()
-
     alt_prodi_sama = []
     for kampus, prodi_map in db.items():
         if kampus == kampus_target:
             continue
-        # Cari prodi yang namanya sama persis atau mirip
         for prodi, info in prodi_map.items():
             prodi_cmp = prodi.lower().replace("d3 ", "").replace("d4 ", "").strip()
-            # Match: sama persis atau salah satu mengandung yang lain
             if prodi_cmp == prodi_clean or prodi_clean in prodi_cmp or prodi_cmp in prodi_clean:
                 bobot_p = get_bobot(prodi)
                 sw_p    = hitung_tw(skor, bobot_p)
                 kat_p, kat_clr_p, badge_p, icon_p, pct_p = get_kategori_skor(sw_p, info["mn"], info["mx"])
                 alt_prodi_sama.append({
-                    "prodi":   prodi,
-                    "kampus":  kampus,
-                    "mn":      info["mn"],
-                    "mx":      info["mx"],
-                    "sw":      round(sw_p, 1),
-                    "gap":     round(sw_p - info["mn"], 1),
-                    "kat":     kat_p,
-                    "kat_clr": kat_clr_p,
-                    "badge":   badge_p,
-                    "icon":    icon_p,
-                    "ppct":    round(pct_p, 1),
+                    "prodi": prodi, "kampus": kampus,
+                    "mn": info["mn"], "mx": info["mx"],
+                    "sw": round(sw_p, 1), "gap": round(sw_p - info["mn"], 1),
+                    "kat": kat_p, "kat_clr": kat_clr_p,
+                    "badge": badge_p, "icon": icon_p, "ppct": round(pct_p, 1),
                 })
-            # Hanya ambil match pertama per kampus (hindari duplikat)
-            # break setelah match
-
     alt_prodi_sama.sort(key=lambda x: (kat_order.get(x["kat"], 9), -x["gap"]))
     alt_prodi_sama = alt_prodi_sama[:top_n]
 
@@ -876,49 +842,38 @@ def get_rekomendasi_alternatif(skor, sw, prodi_target, kampus_target, jenjang, t
 
 
 def render_alt_cards(items, show_kampus=False, show_prodi=False):
-    """Render kartu-kartu rekomendasi alternatif."""
     if not items:
         st.info("Tidak ada data alternatif yang ditemukan.")
         return
-
     badge_bg = {
         "Sangat Aman": ("#e6f5ee", "#148a42", "#9adbb8"),
         "Aman":        ("#edf6ff", "#1a5fa0", "#90c0f0"),
         "Berisiko":    ("#fff4e6", "#e67e22", "#f4c08a"),
         "Tidak Aman":  ("#fff0f0", "#c0392b", "#f4a0a0"),
     }
-
     for item in items:
         bg, fc, bc = badge_bg.get(item["kat"], ("#f8faff","#334466","#ccd9f0"))
         gap_str  = f"+{item['gap']:.0f}" if item["gap"] >= 0 else f"{item['gap']:.0f}"
         gap_clr  = "#148a42" if item["gap"] >= 0 else "#c0392b"
-
         if show_kampus:
             nama_utama = item["kampus"]
             nama_sub   = item["prodi"]
         else:
             nama_utama = item["prodi"]
             nama_sub   = item["kampus"]
-
         st.markdown(f"""
         <div style="background:#fff;border:1.5px solid {bc};border-radius:12px;
                     padding:.9rem 1.2rem;margin-bottom:.55rem;
                     border-left:5px solid {fc};
-                    box-shadow:0 2px 10px rgba(30,60,140,.07);
-                    transition:all .2s ease;">
+                    box-shadow:0 2px 10px rgba(30,60,140,.07);">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.4rem">
             <div>
-              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;
-                          font-size:.92rem;color:#12203f">{nama_utama}</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.92rem;color:#12203f">{nama_utama}</div>
               <div style="font-size:.75rem;color:#6a7a9a;margin-top:2px">{nama_sub}</div>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-              <span style="background:{bg};color:{fc};border:1.5px solid {bc};
-                           padding:.22rem .75rem;border-radius:99px;
-                           font-size:.72rem;font-weight:700">{item['icon']} {item['kat']}</span>
-              <span style="background:#f0f4fa;color:#334466;border:1px solid #dde8f4;
-                           padding:.22rem .75rem;border-radius:99px;font-size:.72rem;font-weight:600">
-                ~{item['ppct']:.0f}% peluang</span>
+              <span style="background:{bg};color:{fc};border:1.5px solid {bc};padding:.22rem .75rem;border-radius:99px;font-size:.72rem;font-weight:700">{item['icon']} {item['kat']}</span>
+              <span style="background:#f0f4fa;color:#334466;border:1px solid #dde8f4;padding:.22rem .75rem;border-radius:99px;font-size:.72rem;font-weight:600">~{item['ppct']:.0f}% peluang</span>
             </div>
           </div>
           <div style="display:flex;gap:1.5rem;margin-top:.55rem;font-size:.78rem;flex-wrap:wrap">
@@ -1057,15 +1012,11 @@ def ch_pipeline(skor, bobot, info, prodi, key=None):
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False},key=key or ckey("pipe"))
 
 def ch_skor_gauge(sw, mn, mx, key=None):
-    """Chart gauge 4 kategori skor"""
-    # Zona warna
     na_end  = mn - 70
     br_end  = mn
     a_end   = mx
     sa_end  = min(mx + 80, 1000)
-
     fig = go.Figure()
-    # Zona background
     zones = [
         (200,   na_end, "rgba(255,0,0,.08)",   "Tidak Aman"),
         (na_end, br_end, "rgba(230,126,34,.10)", "Berisiko"),
@@ -1078,21 +1029,16 @@ def ch_skor_gauge(sw, mn, mx, key=None):
                           line_width=0, annotation_text=lbl,
                           annotation_position="top",
                           annotation_font=dict(size=9, color='#3a4a65'))
-
-    # Garis skor
     fig.add_vline(x=sw, line_dash="dash", line_color="#7048c8", line_width=3,
                   annotation_text=f"  Skormu: {sw:.0f}", annotation_font_color="#7048c8", annotation_font_size=12)
-    # Garis referensi
     fig.add_vline(x=mn, line_dash="dot", line_color="#d4620a", line_width=1.5,
                   annotation_text=f"  Min ({mn})", annotation_font_color="#d4620a", annotation_font_size=10)
     fig.add_vline(x=mx, line_dash="dot", line_color="#148a42", line_width=1.5,
                   annotation_text=f"  Aman ({mx})", annotation_font_color="#148a42", annotation_font_size=10)
-
     fig.add_trace(go.Scatter(x=[sw], y=[0.5], mode='markers',
         marker=dict(size=18, color='#7048c8', symbol='diamond',
                     line=dict(color='#fff', width=2)),
         name=f'Skor {sw:.0f}', showlegend=False))
-
     fig.update_layout(**CTH,
         xaxis=dict(range=[max(200, mn-150), min(1000, mx+100)],
                    title="Skor Tertimbang", gridcolor='#eef1f5', tickfont=dict(size=9,color='#3a4a65')),
@@ -1146,7 +1092,7 @@ def ch_progress(r, key=None):
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False},key=key or ckey("prog"))
 
 # ══════════════════════════════════════════════════════════
-# PDF EXPORT
+# PDF EXPORT — CHANGE 1: rounded total skor + alt recommendations
 # ══════════════════════════════════════════════════════════
 def generate_pdf(r):
     now  = datetime.datetime.now().strftime("%d %B %Y, %H:%M")
@@ -1176,6 +1122,45 @@ def generate_pdf(r):
     </div>""" for m in rencana)
     gc = "green" if r["gap"]>=0 else "red"
     pc = "green" if r["ppct"]>=65 else "orange" if r["ppct"]>=35 else "red"
+
+    # ── Rekomendasi alternatif untuk PDF ──
+    skor = r["skor"]
+    sw   = r["sw"]
+    alt_kampus, alt_ptn = get_rekomendasi_alternatif(
+        skor, sw, r["prodi"], r["kampus"], r["jenjang"], top_n=5
+    )
+    def alt_rows(items, show_kampus=False):
+        rows = ""
+        for item in items:
+            gap_str = f"+{item['gap']:.0f}" if item["gap"] >= 0 else f"{item['gap']:.0f}"
+            if show_kampus:
+                col1, col2 = item["kampus"], item["prodi"]
+            else:
+                col1, col2 = item["prodi"], item["kampus"]
+            rows += f"<tr><td>{col1}</td><td>{col2}</td><td>{item['sw']:.0f}</td><td>{item['mn']}–{item['mx']}</td><td>{gap_str}</td><td>{item['icon']} {item['kat']}</td><td>{item['ppct']:.0f}%</td></tr>"
+        return rows
+
+    alt_kampus_html = ""
+    if alt_kampus:
+        alt_kampus_html = f"""
+        <h2>🏛️ Rekomendasi Prodi Lain di {r['kampus']}</h2>
+        <table>
+          <tr><th>Program Studi</th><th>Kampus</th><th>Skor Kamu</th><th>Rentang Aman</th><th>Gap</th><th>Status</th><th>Peluang</th></tr>
+          {alt_rows(alt_kampus, show_kampus=False)}
+        </table>"""
+
+    alt_ptn_html = ""
+    if alt_ptn:
+        alt_ptn_html = f"""
+        <h2>🔄 {r['prodi']} di Kampus Lain</h2>
+        <table>
+          <tr><th>Kampus</th><th>Program Studi</th><th>Skor Kamu</th><th>Rentang Aman</th><th>Gap</th><th>Status</th><th>Peluang</th></tr>
+          {alt_rows(alt_ptn, show_kampus=True)}
+        </table>"""
+
+    # CHANGE 1: round skor tertimbang to integer in PDF
+    sw_rounded = round(r["sw"])
+
     return f"""<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Laporan SKORIA — {nama}</title>
 <style>
@@ -1198,7 +1183,6 @@ td{{padding:5px 9px;border:1px solid #dde3ec;color:#374151}}
 tr:nth-child(even) td{{background:#f7f9fc}}
 .footer{{margin-top:.8cm;font-size:8pt;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:7px}}
 @media print{{body{{padding:.8cm 1cm}}}}
-/* Kategori badge */
 .badge-sa{{background:#e6f5ee;color:#148a42;padding:3px 10px;border-radius:99px;font-weight:700}}
 .badge-a {{background:#edf6ff;color:#1a5fa0;padding:3px 10px;border-radius:99px;font-weight:700}}
 .badge-br{{background:#fff4e6;color:#d4620a;padding:3px 10px;border-radius:99px;font-weight:700}}
@@ -1214,7 +1198,7 @@ tr:nth-child(even) td{{background:#f7f9fc}}
 <tr><th>Program Studi</th><td>{r['prodi']}</td><th>Kampus Target</th><td>{r['kampus']}</td></tr></table>
 <h2>📊 Ringkasan Hasil</h2>
 <div class="kpi-row">
-<div class="kpi"><div class="lbl">Skor Tertimbang</div><div class="val {gc}">{r['sw']:.0f}</div><div class="lbl">dari 1000</div></div>
+<div class="kpi"><div class="lbl">Skor Tertimbang</div><div class="val {gc}">{sw_rounded}</div><div class="lbl">dari 1000</div></div>
 <div class="kpi"><div class="lbl">Rentang Aman</div><div class="val blue">{r['mn']} – {r['mx']}</div></div>
 <div class="kpi"><div class="lbl">Peluang Lolos</div><div class="val {pc}">{r['ppct']:.0f}%</div></div>
 <div class="kpi"><div class="lbl">Gap vs Minimum</div><div class="val {gc}">{r['gap']:+.0f}</div></div>
@@ -1225,13 +1209,15 @@ tr:nth-child(even) td{{background:#f7f9fc}}
 <h2>📋 Bobot & Skor Subtes</h2>
 <table><tr><th>Subtes</th><th>Bobot</th><th>Skor</th><th>Kontribusi</th></tr>
 {bobot_rows}
-<tr style="background:#eef3fc"><th colspan="2">Total Skor Tertimbang</th><th colspan="2"><strong>{r['sw']:.1f}</strong></th></tr></table>
+<tr style="background:#eef3fc"><th colspan="2">Total Skor Tertimbang</th><th colspan="2"><strong>{sw_rounded}</strong></th></tr></table>
 <h2>🧠 Indikator Psikologis</h2>
 <table>
 <tr><th>Fokus</th><td>{r['fokus']}/5</td><th>Percaya Diri</th><td>{r['pede']}/5</td></tr>
 <tr><th>Kecemasan</th><td>{r['cemas']}/5</td><th>Distraksi</th><td>{r['distrak']}/5</td></tr>
 <tr><th>Kesiapan Mental</th><td>{r['psiko']:.0f}/100</td><th>Konsistensi</th><td>{r['konsist']:.0f}/100</td></tr>
 <tr><th>Stabilitas</th><td>{r['stab']:.0f}/100</td><th>Risiko Underperform</th><td>{r['risk'][0]} {r['risk'][1]}</td></tr></table>
+{alt_kampus_html}
+{alt_ptn_html}
 <h2>📅 Rencana Belajar Mingguan (8 Minggu)</h2>
 {minggu_html}
 <div class="footer">🎯 SKORIA — AI UTBK Intelligence · Data SNPMB/BPPP Kemdikbud 2025/2026 · Skor skala 200–1000</div>
@@ -1295,7 +1281,7 @@ def render_skor_legend(mn, mx):
     </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# PAGE: HOME
+# PAGE: HOME — CHANGE 3: Feature explanation panel added
 # ══════════════════════════════════════════════════════════
 def page_home():
     st.markdown("""
@@ -1334,6 +1320,68 @@ def page_home():
       <div class="stat-box"><div class="stat-num">8</div><div class="stat-lbl">📅 Minggu Rencana</div></div>
     </div>""", unsafe_allow_html=True)
 
+    # ── CHANGE 3: Penjelasan fitur / hasil yang bisa didapat ──
+    st.markdown("""<div class="fitur-panel">
+      <div class="fitur-panel-title">🔍 Apa Saja yang Bisa Kamu Dapatkan dari SKORIA AI?</div>
+      <div class="fitur-grid-3">
+
+        <div class="fitur-item d1">
+          <span class="fitur-item-icon">📊</span>
+          <div class="fitur-item-title">Skor Tertimbang (TW)</div>
+          <div class="fitur-item-desc">Skor akhir yang dihitung berdasarkan 7 subtes TPS dengan bobot yang disesuaikan per program studi — persis seperti cara penilaian nyata UTBK.</div>
+        </div>
+
+        <div class="fitur-item d2">
+          <span class="fitur-item-icon">🏆</span>
+          <div class="fitur-item-title">4 Kategori Kesiapan</div>
+          <div class="fitur-item-desc">Status lolos dikelompokkan menjadi <strong>Tidak Aman · Berisiko · Aman · Sangat Aman</strong> lengkap dengan estimasi persentase peluang lolos.</div>
+        </div>
+
+        <div class="fitur-item d3">
+          <span class="fitur-item-icon">📏</span>
+          <div class="fitur-item-title">Gap vs Skor Minimum</div>
+          <div class="fitur-item-desc">Selisih skor kamu dengan batas minimum dan batas aman kampus/prodi target — kamu tahu persis berapa poin yang perlu ditingkatkan.</div>
+        </div>
+
+        <div class="fitur-item d4">
+          <span class="fitur-item-icon">🎯</span>
+          <div class="fitur-item-title">Rekomendasi Prodi Alternatif</div>
+          <div class="fitur-item-desc">Jika peluang masih kurang, SKORIA menampilkan prodi lain di kampus yang sama dan prodi serupa di kampus berbeda yang lebih sesuai skormu.</div>
+        </div>
+
+        <div class="fitur-item d5">
+          <span class="fitur-item-icon">🤖</span>
+          <div class="fitur-item-title">Strategi Belajar AI (LightGBM)</div>
+          <div class="fitur-item-desc">Model machine learning menganalisis kebiasaan & kondisi psikologismu lalu merekomendasikan strategi yang paling tepat dari 4 pendekatan berbeda.</div>
+        </div>
+
+        <div class="fitur-item d6">
+          <span class="fitur-item-icon">📅</span>
+          <div class="fitur-item-title">Rencana Belajar 8 Minggu</div>
+          <div class="fitur-item-desc">Jadwal belajar personal mingguan — Fondasi, Intensif, Pemantapan, hingga Final — dengan target skor per minggu dan tugas harian yang spesifik.</div>
+        </div>
+
+        <div class="fitur-item d1">
+          <span class="fitur-item-icon">📡</span>
+          <div class="fitur-item-title">Radar TPS vs Profil Ideal</div>
+          <div class="fitur-item-desc">Grafik radar interaktif membandingkan skormu dengan profil ideal prodi — langsung terlihat subtes mana yang perlu diperkuat lebih dulu.</div>
+        </div>
+
+        <div class="fitur-item d2">
+          <span class="fitur-item-icon">🧠</span>
+          <div class="fitur-item-title">Analisis Psikologis</div>
+          <div class="fitur-item-desc">Indikator Kesiapan Mental, Konsistensi Belajar, dan Stabilitas Mental yang membantumu memahami faktor non-akademik yang mempengaruhi performa UTBK.</div>
+        </div>
+
+        <div class="fitur-item d3">
+          <span class="fitur-item-icon">📄</span>
+          <div class="fitur-item-title">Export Laporan PDF</div>
+          <div class="fitur-item-desc">Seluruh hasil analisis — skor, gap, rekomendasi alternatif, dan rencana 8 minggu — bisa diunduh sebagai laporan HTML siap cetak menjadi PDF.</div>
+        </div>
+
+      </div>
+    </div>""", unsafe_allow_html=True)
+
     # Legenda 4 kategori
     st.markdown("""<div style="background:#fff;border:1px solid #e0e8f4;border-radius:12px;padding:1rem 1.4rem;margin-bottom:1.2rem;box-shadow:0 2px 12px rgba(30,60,140,.08)">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:.9rem;font-weight:700;color:#12203f;margin-bottom:.7rem">📊 4 Kategori Rentang Skor SKORIA</div>
@@ -1349,12 +1397,11 @@ def page_home():
       <div class="feat-card d1"><span class="feat-icon">🗃️</span><div class="feat-title">Database xlsx Real</div><div class="feat-desc">Data dari file xlsx estimasi historis UTBK 2022–2024 langsung terhubung</div></div>
       <div class="feat-card d2"><span class="feat-icon">📊</span><div class="feat-title">4 Kategori Skor</div><div class="feat-desc">Tidak Aman · Berisiko · Aman · Sangat Aman dengan rentang skor visual</div></div>
       <div class="feat-card d3"><span class="feat-icon">🤖</span><div class="feat-title">AI LightGBM</div><div class="feat-desc">Prediksi strategi belajar otomatis dari model machine learning</div></div>
-      <div class="feat-card d4"><span class="feat-icon">📄</span><div class="feat-title">Export PDF</div><div class="feat-desc">Laporan lengkap 8 minggu terstruktur siap cetak</div></div>
+      <div class="feat-card d4"><span class="feat-icon">📄</span><div class="feat-title">Export PDF</div><div class="feat-desc">Laporan lengkap 8 minggu + rekomendasi alternatif siap cetak</div></div>
     </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
 
-    # Status database
     if _DB_ERR:
         st.markdown(f'<div class="al al-d"><h4>⚠️ Database Error</h4>{_DB_ERR}<br>Pastikan file xlsx tersedia atau URL GitHub benar.</div>', unsafe_allow_html=True)
     elif _PTN_S1:
@@ -1378,33 +1425,33 @@ def page_home():
         </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# PAGE: SURVEY — STEP 1 (Nama → Jenjang → Kampus → Jurusan)
+# PAGE: SURVEY — CHANGE 4: urutan Nama → Jenjang → Kampus → Jurusan (sudah benar, diperkuat)
 # ══════════════════════════════════════════════════════════
 def step1():
     st.markdown("""<div class="al al-i d1" style="margin-bottom:1rem;padding:.8rem 1.2rem">
       <h4>👤 Langkah 1 dari 4 — Profil &amp; Target</h4>
-      Isi nama, pilih jenjang, kampus, lalu jurusan. Skor aman akan ditampilkan otomatis.
+      Isi <strong>① Nama Lengkap</strong> → pilih <strong>② Jenjang Pendidikan</strong> → pilih <strong>③ Kampus</strong> → lalu <strong>④ Jurusan/Prodi</strong>.
     </div>""", unsafe_allow_html=True)
     st.markdown('<div class="form-box">', unsafe_allow_html=True)
     st.markdown('<h3>👤 Profil &amp; Target</h3>', unsafe_allow_html=True)
     d = st.session_state.data
 
-    # ① Nama Lengkap
+    # ① Nama Lengkap — PERTAMA
     nama = st.text_input("① Nama Lengkap", value=d.get("nama",""), placeholder="Masukkan nama kamu...")
 
-    # ② Jenjang
+    # ② Jenjang Pendidikan — KEDUA
     prev_jenjang = d.get("jenjang", DAFTAR_JENJANG[0])
     if prev_jenjang not in DAFTAR_JENJANG:
         prev_jenjang = DAFTAR_JENJANG[0]
     jenjang = st.radio(
-        "② Jenjang yang Dituju",
+        "② Jenjang Pendidikan yang Dituju",
         DAFTAR_JENJANG,
         index=DAFTAR_JENJANG.index(prev_jenjang),
         horizontal=True,
         help="S1 = Sarjana (4 th) | D4 = Sarjana Terapan (4 th, vokasi) | D3 = Diploma Tiga (3 th, vokasi)"
     )
 
-    # Ambil daftar PTN untuk jenjang yang dipilih
+    # ③ Kampus — KETIGA (setelah jenjang dipilih)
     daftar_ptn = get_daftar_ptn(jenjang)
     if not daftar_ptn:
         st.warning(f"⚠️ Data PTN untuk jenjang {jenjang} belum tersedia. Cek koneksi atau file xlsx.")
@@ -1413,7 +1460,6 @@ def step1():
             st.session_state.page = "home"; st.rerun()
         return
 
-    # ③ Kampus
     prev_kampus = d.get("kampus", daftar_ptn[0])
     if prev_kampus not in daftar_ptn:
         prev_kampus = daftar_ptn[0]
@@ -1421,10 +1467,10 @@ def step1():
         "③ Kampus Target (PTN)",
         daftar_ptn,
         index=daftar_ptn.index(prev_kampus),
-        help="Pilih PTN yang kamu tuju"
+        help="Pilih PTN yang kamu tuju — daftar disesuaikan dengan jenjang yang dipilih"
     )
 
-    # ④ Jurusan/Prodi — dinamis berdasarkan kampus + jenjang
+    # ④ Jurusan/Prodi — KEEMPAT (setelah kampus dipilih)
     daftar_prodi = get_daftar_prodi(kampus, jenjang)
     if not daftar_prodi:
         st.warning(f"⚠️ Tidak ada data prodi untuk {kampus} ({jenjang}).")
@@ -1438,7 +1484,7 @@ def step1():
         "④ Program Studi / Jurusan",
         daftar_prodi,
         index=daftar_prodi.index(prev_prodi),
-        help="Pilih program studi yang kamu tuju di kampus ini"
+        help="Pilih program studi setelah memilih kampus — daftar difilter otomatis"
     )
 
     # Info skor aman
@@ -1454,7 +1500,6 @@ def step1():
       <br><small style="color:#6a7a95">Estimasi historis UTBK 2022–2024 · Sumber: SNPMB/BPPP Kemdikbud & referensi media pendidikan</small>
     </div>""", unsafe_allow_html=True)
 
-    # Bobot subtes
     st.markdown("---")
     st.markdown(f"**Distribusi bobot subtes untuk _{prodi}_:**")
     bobot_chips(prodi)
@@ -1603,7 +1648,6 @@ def page_result():
     salam= "Selamat pagi" if jam<11 else "Selamat siang" if jam<15 else "Selamat sore" if jam<18 else "Selamat malam"
     jenjang_lbl = r.get("jenjang","S1 (Sarjana)")
 
-    # Warna badge berdasarkan 4 kategori
     kat_cls_map = {
         "Sangat Aman":"badge-sa", "Aman":"badge-a",
         "Berisiko":"badge-br",    "Tidak Aman":"badge-na"
@@ -1621,7 +1665,6 @@ def page_result():
       </div>
     </div>""", unsafe_allow_html=True)
 
-    # KPI Row
     mn, mx = r["mn"], r["mx"]
     gc = "c-green" if r["gap"]>=0 else "c-red"
     pc = "c-green" if r["ppct"]>=65 else "c-orange" if r["ppct"]>=35 else "c-red"
@@ -1647,11 +1690,8 @@ def page_result():
             </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
-
-    # Legenda 4 kategori
     render_skor_legend(mn, mx)
 
-    # LGBM Banner
     if r.get("lgbm_r") and r["lgbm_r"].get("ok"):
         h=r["lgbm_r"]; det=h.get("detail",{})
         kpct = f"{h['kpct']:.1f}%" if h.get("kpct") else ""
@@ -1663,7 +1703,6 @@ def page_result():
           <ul style="margin-top:.35rem">{tips}</ul>
         </div>""", unsafe_allow_html=True)
 
-    # Status Banner (4 level)
     if r["kat"] == "Sangat Aman":
         st.markdown(f"""<div class="al al-s"><h4>🏆 Status: SANGAT AMAN</h4>
           Skor tertimbang <strong>{r['sw']:.0f}</strong> melampaui batas aman atas {mx}.
@@ -1681,7 +1720,6 @@ def page_result():
           Gap <strong>{abs(r['gap']):.0f} poin</strong> dari minimum {mn}.
           Butuh peningkatan signifikan atau pertimbangkan PTN/prodi alternatif.</div>""", unsafe_allow_html=True)
 
-    # TABS
     t1,t2,t3,t4,t5,t6,t7 = st.tabs([
         "📡 Radar & Skor TPS",
         "📊 Posisi & Peluang",
@@ -1711,12 +1749,10 @@ def page_result():
         st.markdown('<div class="sec">📊 Posisi Skor — 4 Kategori</div>', unsafe_allow_html=True)
         ch_skor_gauge(r["sw"], mn, mx, key="r_gauge_t2")
         render_skor_legend(mn, mx)
-
-        st.markdown('<div class="sec">📋 Ringkasan Peluang</div>', unsafe_allow_html=True)
-        # Tampilkan semua prodi di PTN yang sama
+        st.markdown('<div class="sec">📋 Ringkasan Peluang di Semua Prodi</div>', unsafe_allow_html=True)
         daftar_prodi_ptn = get_daftar_prodi(r["kampus"], r["jenjang"])
         rows = []
-        for prodi_lain in daftar_prodi_ptn[:30]:  # limit 30
+        for prodi_lain in daftar_prodi_ptn[:30]:
             info_l = get_skor_info(r["kampus"], prodi_lain, r["jenjang"])
             bobot_l = get_bobot(prodi_lain)
             sw_l = hitung_tw(r["skor"], bobot_l)
@@ -1729,12 +1765,10 @@ def page_result():
                 "Est. Peluang": f"{pct_l:.0f}%"
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
         d1,d2,d3 = st.columns(3)
         with d1: st.metric("Skor Minimum",mn)
         with d2: st.metric("Skor Sangat Aman (atas)",mx)
         with d3: st.metric("Skor Kamu",f"{r['sw']:.0f}",delta=f"{r['gap']:+.0f}",delta_color="normal" if r["gap"]>=0 else "inverse")
-
 
     with t3:
         sw   = r["sw"]
@@ -1742,90 +1776,60 @@ def page_result():
         alt_kampus, alt_ptn = get_rekomendasi_alternatif(
             skor, sw, r["prodi"], r["kampus"], r["jenjang"]
         )
-
-        # ── Info konteks ──
         kat_cls_info = {"Sangat Aman":"al-s","Aman":"al-i","Berisiko":"al-w","Tidak Aman":"al-d"}
         info_cls = kat_cls_info.get(r["kat"], "al-i")
         st.markdown(f'''<div class="al {info_cls}" style="padding:.75rem 1.1rem;margin-bottom:1rem">
           <h4>{r["kat_icon"]} Skor Tertimbang Kamu: <strong>{sw:.0f}</strong> &nbsp;·&nbsp; Status: {r["kat"]}</h4>
           Rekomendasi di bawah dihitung menggunakan <strong>skor TPS kamu yang sama</strong>
-          dengan bobot masing-masing program studi — sehingga skor kamu mungkin berbeda tiap prodi.
+          dengan bobot masing-masing program studi — skor kamu mungkin berbeda tiap prodi.
         </div>''', unsafe_allow_html=True)
 
-        # ══ BAGIAN 1: Prodi lain, kampus sama ══
         st.markdown('<div class="sec">🏛️ Prodi Lain di Kampus yang Sama</div>', unsafe_allow_html=True)
         st.caption(f"Prodi lain di {r['kampus']} — diurutkan dari peluang terbaik")
-
         if alt_kampus:
-            # Filter tabs: Semua / Sangat Aman & Aman / Berisiko & Tidak Aman
             fa1, fa2, fa3 = st.tabs(["Semua Prodi", "✅ Aman & Sangat Aman", "⚡ Berisiko & Tidak Aman"])
             with fa1:
                 render_alt_cards(alt_kampus, show_kampus=False)
             with fa2:
                 aman_list = [x for x in alt_kampus if x["kat"] in ("Sangat Aman","Aman")]
-                if aman_list:
-                    render_alt_cards(aman_list, show_kampus=False)
-                else:
-                    st.info("Tidak ada prodi dengan kategori Aman/Sangat Aman.")
+                if aman_list: render_alt_cards(aman_list, show_kampus=False)
+                else: st.info("Tidak ada prodi dengan kategori Aman/Sangat Aman.")
             with fa3:
                 risiko_list = [x for x in alt_kampus if x["kat"] in ("Berisiko","Tidak Aman")]
-                if risiko_list:
-                    render_alt_cards(risiko_list, show_kampus=False)
-                else:
-                    st.info("Semua prodi masuk kategori Aman atau Sangat Aman! 🎉")
+                if risiko_list: render_alt_cards(risiko_list, show_kampus=False)
+                else: st.info("Semua prodi masuk kategori Aman atau Sangat Aman! 🎉")
         else:
             st.info("Data prodi untuk kampus ini tidak tersedia.")
 
         st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
 
-        # ══ BAGIAN 2: Prodi sama / mirip, kampus berbeda ══
         st.markdown('<div class="sec">🔄 Prodi Serupa di Kampus Berbeda</div>', unsafe_allow_html=True)
         st.caption(f"Mencari \"{r['prodi']}\" atau prodi serupa di PTN lain")
-
         if alt_ptn:
             fb1, fb2, fb3 = st.tabs(["Semua PTN", "✅ Aman & Sangat Aman", "⚡ Berisiko & Tidak Aman"])
             with fb1:
                 render_alt_cards(alt_ptn, show_kampus=True)
             with fb2:
                 aman_ptn = [x for x in alt_ptn if x["kat"] in ("Sangat Aman","Aman")]
-                if aman_ptn:
-                    render_alt_cards(aman_ptn, show_kampus=True)
-                else:
-                    st.info("Tidak ada PTN dengan kategori Aman/Sangat Aman untuk prodi ini.")
+                if aman_ptn: render_alt_cards(aman_ptn, show_kampus=True)
+                else: st.info("Tidak ada PTN dengan kategori Aman/Sangat Aman untuk prodi ini.")
             with fb3:
                 risiko_ptn = [x for x in alt_ptn if x["kat"] in ("Berisiko","Tidak Aman")]
-                if risiko_ptn:
-                    render_alt_cards(risiko_ptn, show_kampus=True)
-                else:
-                    st.info("Semua PTN masuk kategori Aman atau Sangat Aman! 🎉")
+                if risiko_ptn: render_alt_cards(risiko_ptn, show_kampus=True)
+                else: st.info("Semua PTN masuk kategori Aman atau Sangat Aman! 🎉")
         else:
             st.info(f"Tidak ditemukan prodi serupa di PTN lain dengan data yang tersedia.")
 
-        # ══ Tabel ringkasan gabungan ══
         st.markdown('<div class="sec">📋 Tabel Ringkasan Semua Alternatif</div>', unsafe_allow_html=True)
         all_alt = []
         for item in alt_kampus[:5]:
-            all_alt.append({
-                "Tipe": "Kampus Sama",
-                "Program Studi": item["prodi"],
-                "Kampus": item["kampus"],
-                "Skor Kamu": f"{item['sw']:.0f}",
-                "Rentang Aman": f"{item['mn']}–{item['mx']}",
-                "Gap": f"{item['gap']:+.0f}",
-                "Status": f"{item['icon']} {item['kat']}",
-                "Peluang": f"{item['ppct']:.0f}%",
-            })
+            all_alt.append({"Tipe":"Kampus Sama","Program Studi":item["prodi"],"Kampus":item["kampus"],
+                "Skor Kamu":f"{item['sw']:.0f}","Rentang Aman":f"{item['mn']}–{item['mx']}",
+                "Gap":f"{item['gap']:+.0f}","Status":f"{item['icon']} {item['kat']}","Peluang":f"{item['ppct']:.0f}%"})
         for item in alt_ptn[:5]:
-            all_alt.append({
-                "Tipe": "Prodi Serupa",
-                "Program Studi": item["prodi"],
-                "Kampus": item["kampus"],
-                "Skor Kamu": f"{item['sw']:.0f}",
-                "Rentang Aman": f"{item['mn']}–{item['mx']}",
-                "Gap": f"{item['gap']:+.0f}",
-                "Status": f"{item['icon']} {item['kat']}",
-                "Peluang": f"{item['ppct']:.0f}%",
-            })
+            all_alt.append({"Tipe":"Prodi Serupa","Program Studi":item["prodi"],"Kampus":item["kampus"],
+                "Skor Kamu":f"{item['sw']:.0f}","Rentang Aman":f"{item['mn']}–{item['mx']}",
+                "Gap":f"{item['gap']:+.0f}","Status":f"{item['icon']} {item['kat']}","Peluang":f"{item['ppct']:.0f}%"})
         if all_alt:
             st.dataframe(pd.DataFrame(all_alt), use_container_width=True, hide_index=True)
 
@@ -1905,7 +1909,15 @@ def page_result():
 
     with t7:
         st.markdown('<div class="sec">📄 Export Laporan ke PDF</div>', unsafe_allow_html=True)
-        st.markdown("""<div class="al al-i"><h4>Cara Menyimpan sebagai PDF</h4><ol>
+        st.markdown("""<div class="al al-i"><h4>📋 Laporan PDF Mencakup:</h4><ul>
+          <li>Profil siswa & target kampus/prodi</li>
+          <li>Skor tertimbang (dibulatkan) & status kategori kesiapan</li>
+          <li>Tabel bobot & kontribusi per subtes</li>
+          <li>Indikator psikologis & konsistensi belajar</li>
+          <li><strong>Rekomendasi prodi alternatif</strong> di kampus yang sama & prodi serupa di kampus lain</li>
+          <li>Rencana belajar 8 minggu personal (Fondasi → Intensif → Pemantapan → Final)</li>
+        </ul></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="al al-s"><h4>Cara Menyimpan sebagai PDF</h4><ol>
           <li>Klik tombol <strong>Generate & Download Laporan HTML</strong></li>
           <li>Buka file HTML di browser</li>
           <li>Tekan <strong>Ctrl+P</strong> (Win) atau <strong>Cmd+P</strong> (Mac)</li>
@@ -1927,7 +1939,7 @@ def page_result():
                 {"Info":"Jenjang","Detail":r.get("jenjang","—")},
                 {"Info":"Program Studi","Detail":r["prodi"]},
                 {"Info":"Kampus","Detail":r["kampus"]},
-                {"Info":"Skor Tertimbang","Detail":f"{r['sw']:.0f} / 1000"},
+                {"Info":"Skor Tertimbang","Detail":f"{round(r['sw'])} / 1000"},
                 {"Info":"Gap vs Minimum","Detail":f"{r['gap']:+.0f}"},
             ]), use_container_width=True, hide_index=True)
         with pp2:
@@ -1940,7 +1952,6 @@ def page_result():
                 {"Indikator":"Risiko Underperform","Nilai":f"{r['risk'][0]} {r['risk'][1]}"},
             ]), use_container_width=True, hide_index=True)
 
-    # Footer
     st.divider()
     nb1,nb2,_ = st.columns([1,1,4])
     with nb1:
