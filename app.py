@@ -2282,7 +2282,7 @@ def page_home():
 
     col1,col2,col3=st.columns([1,2,1])
     with col2:
-        if st.button("🚀 Mulai Analisis Sekarang",type="primary",use_container_width=True,key=ckey("start")):
+        if st.button("🚀 Mulai Analisis Sekarang",type="primary",use_container_width=True,key="btn_home_start"):
             st.session_state.page="survey"; st.session_state.step=1; st.rerun()
 
 # ══════════════════════════════════════════════════════════
@@ -2297,12 +2297,12 @@ def page_survey():
         st.markdown('<div class="form-box"><h3>👤 Data Diri & Target</h3>', unsafe_allow_html=True)
         col1,col2 = st.columns(2)
         with col1:
-            nama=st.text_input("Nama / Inisial",value=d.get("nama",""),key=ckey("nm"),placeholder="Nama kamu...")
-            ptn=st.selectbox("Target PTN",DAFTAR_PTN,index=DAFTAR_PTN.index(d.get("ptn",DAFTAR_PTN[0])),key=ckey("ptn"))
+            nama=st.text_input("Nama / Inisial",value=d.get("nama",""),key="inp_nama",placeholder="Nama kamu...")
+            ptn=st.selectbox("Target PTN",DAFTAR_PTN,index=DAFTAR_PTN.index(d.get("ptn",DAFTAR_PTN[0])),key="inp_ptn")
         with col2:
             jurusan=st.selectbox("Target Jurusan/Prodi",DAFTAR_JURUSAN_S1,
-                index=DAFTAR_JURUSAN_S1.index(d.get("jurusan",DAFTAR_JURUSAN_S1[0])),key=ckey("jur"))
-            asal=st.text_input("Asal Sekolah (opsional)",value=d.get("asal",""),key=ckey("asal"))
+                index=DAFTAR_JURUSAN_S1.index(d.get("jurusan",DAFTAR_JURUSAN_S1[0])),key="inp_jurusan")
+            asal=st.text_input("Asal Sekolah (opsional)",value=d.get("asal",""),key="inp_asal")
         st.markdown('</div>', unsafe_allow_html=True)
         if ptn and jurusan:
             mn,mx = get_target_range(ptn,jurusan)
@@ -2315,9 +2315,9 @@ def page_survey():
             </div>""", unsafe_allow_html=True)
         col1,col2=st.columns(2)
         with col1:
-            if st.button("← Beranda",key=ckey("bk")): st.session_state.page="home"; st.rerun()
+            if st.button("← Beranda",key="btn_s1_back"): st.session_state.page="home"; st.rerun()
         with col2:
-            if st.button("Lanjut: Input Skor →",type="primary",use_container_width=True,key=ckey("nx")):
+            if st.button("Lanjut: Input Skor →",type="primary",use_container_width=True,key="btn_s1_next"):
                 if not nama: st.warning("Masukkan nama terlebih dahulu.")
                 else:
                     d.update({"nama":nama,"ptn":ptn,"jurusan":jurusan,"asal":asal})
@@ -2335,47 +2335,47 @@ def page_survey():
             st.markdown('<div class="form-box"><h3>🧠 TPS Sains & Penalaran</h3>', unsafe_allow_html=True)
             for s in ["PU","PPU","PBM","PK"]:
                 new_scores[s]=st.number_input(f"{s} — {SUBTES_FULL[s]}",min_value=200,max_value=1000,
-                    value=int(scores.get(s,500)),step=5,key=ckey(s))
+                    value=int(scores.get(s,500)),step=5,key=f"inp_{s}")
             st.markdown('</div>', unsafe_allow_html=True)
         with colb:
             st.markdown('<div class="form-box"><h3>📚 Literasi & Matematika</h3>', unsafe_allow_html=True)
             for s in ["LBI","LBE","PM"]:
                 new_scores[s]=st.number_input(f"{s} — {SUBTES_FULL[s]}",min_value=200,max_value=1000,
-                    value=int(scores.get(s,500)),step=5,key=ckey(s))
+                    value=int(scores.get(s,500)),step=5,key=f"inp_{s}")
             st.markdown('</div>', unsafe_allow_html=True)
         col1,col2,col3=st.columns(3)
         with col1:
-            if st.button("← Kembali",key=ckey("bk2")): st.session_state.step=1; st.rerun()
+            if st.button("← Kembali",key="btn_s2_back"): st.session_state.step=1; st.rerun()
         with col3:
-            if st.button("Lanjut: Profil Belajar →",type="primary",use_container_width=True,key=ckey("nx2")):
+            if st.button("Lanjut: Profil Belajar →",type="primary",use_container_width=True,key="btn_s2_next"):
                 d["scores"]=new_scores; st.session_state.step=3; st.rerun()
 
     elif st.session_state.step == 3:
         st.markdown('<div class="sec">📚 Profil & Kebiasaan Belajar</div>', unsafe_allow_html=True)
         st.markdown('<div class="form-box"><h3>⏰ Kebiasaan Belajar</h3>', unsafe_allow_html=True)
         col1,col2,col3=st.columns(3)
-        with col1: jam_hari=st.slider("Jam belajar/hari",0,12,int(d.get("jam_hari",4)),key=ckey("jh"))
-        with col2: hari_minggu=st.slider("Hari belajar/minggu",1,7,int(d.get("hari_minggu",5)),key=ckey("hm"))
-        with col3: tryout_count=st.slider("Jumlah tryout",0,30,int(d.get("tryout_count",3)),key=ckey("tc"))
+        with col1: jam_hari=st.slider("Jam belajar/hari",0,12,int(d.get("jam_hari",4)),key="inp_jam")
+        with col2: hari_minggu=st.slider("Hari belajar/minggu",1,7,int(d.get("hari_minggu",5)),key="inp_hari")
+        with col3: tryout_count=st.slider("Jumlah tryout",0,30,int(d.get("tryout_count",3)),key="inp_tryout")
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="form-box"><h3>🧠 Kondisi Psikologis & Waktu</h3>', unsafe_allow_html=True)
         col1,col2=st.columns(2)
         opts_level=["Rendah","Sedang","Tinggi","Sangat Tinggi"]
         with col1:
-            fokus=st.select_slider("Tingkat Fokus",opts_level,value=d.get("fokus","Tinggi"),key=ckey("fk"))
-            anxiety=st.select_slider("Tingkat Kecemasan",opts_level,value=d.get("anxiety","Sedang"),key=ckey("ax"))
+            fokus=st.select_slider("Tingkat Fokus",opts_level,value=d.get("fokus","Tinggi"),key="inp_fokus")
+            anxiety=st.select_slider("Tingkat Kecemasan",opts_level,value=d.get("anxiety","Sedang"),key="inp_anxiety")
         with col2:
-            motivasi=st.select_slider("Tingkat Motivasi",opts_level,value=d.get("motivasi","Tinggi"),key=ckey("mv"))
+            motivasi=st.select_slider("Tingkat Motivasi",opts_level,value=d.get("motivasi","Tinggi"),key="inp_motivasi")
             durasi_utbk=st.selectbox("Berapa bulan lagi UTBK?",
                 ["< 1 bulan","1-2 bulan","3-4 bulan","5-6 bulan","6+ bulan"],
                 index=["< 1 bulan","1-2 bulan","3-4 bulan","5-6 bulan","6+ bulan"].index(d.get("durasi_utbk","3-4 bulan")),
-                key=ckey("du"))
+                key="inp_durasi")
         st.markdown('</div>', unsafe_allow_html=True)
         col1,_,col3=st.columns(3)
         with col1:
-            if st.button("← Kembali",key=ckey("bk3")): st.session_state.step=2; st.rerun()
+            if st.button("← Kembali",key="btn_s3_back"): st.session_state.step=2; st.rerun()
         with col3:
-            if st.button("🚀 Analisis Sekarang!",type="primary",use_container_width=True,key=ckey("nx3")):
+            if st.button("🚀 Analisis Sekarang!",type="primary",use_container_width=True,key="btn_s3_next"):
                 d.update({"jam_hari":jam_hari,"hari_minggu":hari_minggu,"tryout_count":tryout_count,
                           "fokus":fokus,"anxiety":anxiety,"motivasi":motivasi,"durasi_utbk":durasi_utbk})
                 st.session_state.result=run_analysis(d)
@@ -2498,7 +2498,7 @@ def page_result():
                 margin=dict(t=30,b=30,l=30,r=30),height=350,
                 paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(family="Plus Jakarta Sans"))
-            st.plotly_chart(fig,use_container_width=True,key=ckey("radar"))
+            st.plotly_chart(fig,use_container_width=True,key="chart_radar")
         st.markdown(f'<div class="sec">⚖️ Bobot Subtes untuk {jurusan}</div>', unsafe_allow_html=True)
         df=pd.DataFrame([{"Subtes":s,"Nama":SUBTES_FULL[s],"Bobot":f"{bobot[s]*100:.0f}%",
             "Skor":scores.get(s,500),"Kontribusi":f"{sa[s]['kontribusi']:.1f}","Level":sa[s]["level"]}
@@ -2516,7 +2516,7 @@ def page_result():
             fig2.update_layout(height=300,margin=dict(t=20,b=20,l=20,r=20),
                 paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(family="Plus Jakarta Sans"),yaxis=dict(range=[0,1050]))
-            st.plotly_chart(fig2,use_container_width=True,key=ckey("bar"))
+            st.plotly_chart(fig2,use_container_width=True,key="chart_bar")
         with c2:
             st.markdown('<div class="sec">🔄 Jurusan Alternatif di PTN Sama</div>', unsafe_allow_html=True)
             for a in r["alternatif"]:
@@ -2550,11 +2550,11 @@ def page_result():
     st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
     c1,c2,c3=st.columns(3)
     with c1:
-        if st.button("← Ubah Input",key=ckey("back")): st.session_state.page="survey"; st.session_state.step=2; st.rerun()
+        if st.button("← Ubah Input",key="btn_r_back"): st.session_state.page="survey"; st.session_state.step=2; st.rerun()
     with c2:
-        if st.button("🏠 Beranda",key=ckey("home")): st.session_state.page="home"; st.rerun()
+        if st.button("🏠 Beranda",key="btn_r_home"): st.session_state.page="home"; st.rerun()
     with c3:
-        if st.button("🔄 Analisis Baru",type="primary",use_container_width=True,key=ckey("new")):
+        if st.button("🔄 Analisis Baru",type="primary",use_container_width=True,key="btn_r_new"):
             st.session_state.data={}; st.session_state.result=None
             st.session_state.page="survey"; st.session_state.step=1; st.rerun()
 
