@@ -1,4 +1,3 @@
-
 # =========================
 # DATABASE FROM EXCEL
 # =========================
@@ -3158,6 +3157,53 @@ def predict_lgbm(model, inp):
     except Exception as e:
         return {"ok":False,"err":str(e)}
 
+def get_alt_kampus_lain(sw, kampus_dipilih, jurusan, jenjang="S1 (Sarjana)", max_results=5):
+    """Cari kampus lain yang menawarkan jurusan yang sama/sejenis dengan threshold lebih rendah."""
+    results = []
+    is_d3 = "D3" in jenjang or jurusan.startswith("D3")
+    data_src = PTN_D3_DATA if is_d3 else PTN_JURUSAN_DATA
+    # Jurusan kandidat: sama persis atau jurusan alternatif terkait
+    alt_jurusan_list = [jurusan]
+    if is_d3:
+        alt_jurusan_list += ALTERNATIF_MAP_D3.get(jurusan, [])
+    else:
+        alt_jurusan_list += ALTERNATIF_MAP.get(jurusan, [])
+
+    for ptn_name, ptn_data in data_src.items():
+        if ptn_name == kampus_dipilih: continue
+        if not isinstance(ptn_data, dict): continue
+        if "_klaster" not in ptn_data: continue  # skip header/label entries
+        for jur_cand in alt_jurusan_list:
+            if jur_cand not in ptn_data: continue
+            info_k = ptn_data[jur_cand]
+            mn_k = info_k.get("mn", 0)
+            mx_k = info_k.get("mx", 0)
+            if mn_k <= 0: continue
+            # Hitung mx jika belum ada
+            if mx_k <= 0: mx_k = mn_k + 35
+            pl_k, _, pct_k = hitung_peluang(sw, ptn_name, jur_cand, jenjang)
+            results.append({
+                "kampus": ptn_name,
+                "jurusan": jur_cand,
+                "mn": mn_k,
+                "mx": mx_k,
+                "pl": pl_k,
+                "pct": pct_k,
+                "gap": sw - mn_k,
+                "same_jurusan": jur_cand == jurusan,
+            })
+    # Prioritaskan: jurusan sama dulu, lalu yang peluang lolos > 30%, sort by mn desc (kampus lebih bergengsi dulu)
+    results.sort(key=lambda x: (not x["same_jurusan"], -x["mn"] if x["pct"] >= 30 else 999, -x["pct"]))
+    # Hapus duplikat kampus
+    seen_kampus = set()
+    filtered = []
+    for item in results:
+        if item["kampus"] not in seen_kampus:
+            seen_kampus.add(item["kampus"])
+            filtered.append(item)
+    return filtered[:max_results]
+
+
 def compute(d):
     skor  = {k: d[k] for k in SUBTES}
     bobot = get_bobot(d["jurusan"])
@@ -3167,6 +3213,10 @@ def compute(d):
     pl,pc,ppct = hitung_peluang(sw, d["kampus"], d["jurusan"], jenjang)
     info  = get_ptn_info(d["kampus"], d["jurusan"], jenjang)
     gap   = sw - info["mn"]
+
+    # Rentang estimasi skor: min = batas bawah Berisiko, max = threshold Sangat Aman
+    skor_range_min = max(200, info["mn"] - 140)
+    skor_range_max = info["mx"]
 
     psiko = (d["fokus"]*1.5 + d["pede"]*1.5 + (6-d["cemas"]) + (6-d["distrak"])) / 20 * 100
     konsist = min(100, (d["jam"]*2 + d["hari"]*2.2 + d["latihan"]*1.8 + d["tryout"]*1.5 + d["review"]*1.5)*2)
@@ -3186,11 +3236,15 @@ def compute(d):
     else:
         alt = ALTERNATIF_MAP.get(d["jurusan"],[])
 
+    # Alternatif dari kampus berbeda (jurusan yang sama atau sejenis, PTN lain)
+    alt_kampus_lain = get_alt_kampus_lain(sw, d["kampus"], d["jurusan"], jenjang)
+
     return {**d,"skor":skor,"bobot":bobot,"sw":sw,"rata":rata,
             "pl":pl,"pc":pc,"ppct":ppct,"info":info,"gap":gap,
+            "skor_range_min":skor_range_min,"skor_range_max":skor_range_max,
             "psiko":psiko,"konsist":konsist,"stab":stab,"risk":risk,
             "lgbm_r":lgbm_r,"aman":aman,"jenjang":jenjang,
-            "alternatif":alt}
+            "alternatif":alt,"alt_kampus_lain":alt_kampus_lain}
 
 # ══════════════════════════════════════════════════════════
 # RENCANA BELAJAR MINGGUAN
@@ -3452,6 +3506,10 @@ def generate_pdf(r):
         f"<td>{r['skor'][k]}</td><td>{r['skor'][k]*r['bobot'][k]:.1f}</td></tr>"
         for k in SUBTES)
     alt_list = ", ".join(r["alternatif"]) if r["alternatif"] else "—"
+    alt_lain_list = ""
+    if r.get("alt_kampus_lain"):
+        alt_lain_parts = [f"{a['jurusan']} ({a['kampus']}, {a['pl']} {a['pct']:.0f}%)" for a in r["alt_kampus_lain"]]
+        alt_lain_list = "; ".join(alt_lain_parts)
     lgbm_txt = ""
     if r.get("lgbm_r") and r["lgbm_r"].get("ok"):
         h = r["lgbm_r"]
@@ -3525,7 +3583,10 @@ tr:nth-child(even) td{{background:#f7f9fc}}
 <tr><th>Kecemasan</th><td>{r['cemas']}/5</td><th>Distraksi</th><td>{r['distrak']}/5</td></tr>
 <tr><th>Kesiapan Mental</th><td>{r['psiko']:.0f}/100</td><th>Konsistensi</th><td>{r['konsist']:.0f}/100</td></tr>
 <tr><th>Stabilitas Mental</th><td>{r['stab']:.0f}/100</td><th>Risiko Underperform</th><td>{r['risk'][0]} {r['risk'][1]}</td></tr></table>
-<h2>🎓 Jurusan Alternatif</h2><p>{alt_list}</p>
+<h2>🎓 Jurusan Alternatif (Kampus yang Sama)</h2><p>{alt_list}</p>
+<h2>🏛️ Jurusan Alternatif dari Kampus Lain</h2><p>{alt_lain_list if alt_lain_list else "—"}</p>
+<h2>📐 Rentang Estimasi Skor</h2>
+<p>Berisiko (min): {r['skor_range_min']} &nbsp;→&nbsp; Aman: {r['info']['mn']} &nbsp;→&nbsp; Sangat Aman: {r['skor_range_max']} &nbsp;|&nbsp; Skor Kamu: {r['sw']:.0f}</p>
 <h2>📅 Rencana Belajar Mingguan (8 Minggu)</h2>
 {minggu_html}
 <div class="footer">🎯 SKORIA — AI UTBK Intelligence · Data SNPMB/BPPP Kemdikbud & media pendidikan 2025/2026 · Skor skala 200–1000 · 30 PTN</div>
@@ -3544,11 +3605,13 @@ def render_nav():
     s1 = "done" if p in ["survey","result"] else "active" if p=="home" else ""
     s2 = "done" if p=="result" else "active" if p=="survey" else ""
     s3 = "active" if p=="result" else ""
+    m1 = "✓ Beranda"    if p in ["survey","result"] else "① Beranda"
+    m2 = "✓ Input Data" if p=="result"              else "② Input Data"
     st.markdown(f"""<div class="topbar">
       <div class="topbar-brand">🎯 SKORIA <span class="topbar-tag">AI UTBK Intelligence · S1 &amp; D3 · 30 PTN · 2025/2026</span></div>
       <div style="flex:1"></div>
-      <div class="step-pill {s1}">{{'✓' if p in ['survey','result'] else '①'}} Beranda</div>
-      <div class="step-pill {s2}">{{'✓' if p=='result' else '②'}} Input Data</div>
+      <div class="step-pill {s1}">{m1}</div>
+      <div class="step-pill {s2}">{m2}</div>
       <div class="step-pill {s3}">③ Hasil Analisis</div>
     </div>""", unsafe_allow_html=True)
 
@@ -3610,9 +3673,19 @@ def page_home():
 
     st.markdown("""<div class="hero">
       <div class="hero-badge">🚀 v5.0 · S1 &amp; D3 · 30 PTN · 64+ Program Studi</div>
-      <h1>SKORIA — Analisis Kesiapan<br><span>UTBK</span> Berbasis AI</h1>
-      <p>Platform kecerdasan buatan untuk memahami peluang, gap skor, dan strategi belajar<br>
-         yang dipersonalisasi. Data skor S1 &amp; D3 berbasis SNPMB/BPPP Kemdikbud 2025/2026.</p>
+      <h1>SKORIA — AI UTBK Readiness Dashboard</h1>
+      <p style="font-size:1.05rem;font-weight:600;color:#ffd166;margin:.2rem 0 .6rem">
+        Platform kecerdasan buatan untuk analisis kesiapan UTBK secara holistik
+      </p>
+      <p style="color:rgba(255,255,255,.88);margin:0 0 .5rem">
+        Skor maksimal: <strong style="color:#fff">1000</strong> &nbsp;|&nbsp;
+        Jenjang <strong style="color:#fff">S1 &amp; D3</strong> &nbsp;|&nbsp;
+        Multi-halaman &nbsp;|&nbsp; Charts &nbsp;|&nbsp; PDF Export
+      </p>
+      <p style="color:rgba(255,255,255,.72);font-size:.88rem;margin:0">
+        📊 Data skor aman berbasis SNPMB/BPPP Kemdikbud &amp; referensi media pendidikan 2025/2026
+        — per jurusan, jenjang (S1/D3), dan <strong style="color:#ffd166">30 PTN</strong>
+      </p>
     </div>""", unsafe_allow_html=True)
 
     st.markdown("""<div class="stat-row">
@@ -3915,13 +3988,12 @@ def page_result():
     pc = "c-green" if r["ppct"]>=65 else "c-orange" if r["ppct"]>=35 else "c-red"
     kc = "c-green" if r["pl"] in ("Sangat Aman","Aman") else "c-orange" if r["pl"]=="Kompetitif" else "c-red"
 
-    k1,k2,k3,k4,k5 = st.columns(5)
+    k1,k2,k3,k4 = st.columns(4)
     for i,(col,lbl,val,cls,sub) in enumerate([
         (k1,"Skor Tertimbang",f"{r['sw']:.0f}",kc,"dari 1000"),
-        (k2,"Rata-rata Subtes",f"{r['rata']:.0f}","c-blue","7 subtes"),
-        (k3,"Peluang Lolos",f"{r['ppct']:.0f}%",pc,r["pl"]),
-        (k4,"Gap vs Minimum",f"{r['gap']:+.0f}",gc,f"Min {r['info']['mn']}"),
-        (k5,"Risiko Underperform",r["risk"][0],
+        (k2,"Peluang Lolos",f"{r['ppct']:.0f}%",pc,r["pl"]),
+        (k3,"Gap vs Skor Aman Min",f"{r['gap']:+.0f}",gc,f"Min Aman: {r['info']['mn']}"),
+        (k4,"Risiko Underperform",r["risk"][0],
              "c-green" if r["risk"][0]=="Rendah" else "c-orange" if r["risk"][0]=="Sedang" else "c-red",
              r["risk"][1]),
     ]):
@@ -3931,6 +4003,32 @@ def page_result():
               <div class="kpi-val {cls}">{val}</div>
               <div class="kpi-sub">{sub}</div>
             </div>""", unsafe_allow_html=True)
+
+    # Rentang estimasi skor
+    range_color = "#1a8a4a" if r["sw"] >= r["info"]["mn"] else "#d4620a" if r["sw"] >= r["info"]["mn"]-70 else "#c0392b"
+    st.markdown(f"""<div class="card" style="margin:.6rem 0;padding:.9rem 1.4rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:.72rem;color:#6a7a9a;font-weight:600;text-transform:uppercase;letter-spacing:.04em">
+          📐 Rentang Estimasi Skor — {r['jurusan']} · {r['kampus']}
+        </div>
+        <div style="margin-top:.4rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+          <span style="background:#fef3e8;color:#d4620a;border:1px solid #f5c78a;border-radius:8px;padding:.2rem .7rem;font-weight:700;font-size:.88rem">
+            Min: {r['skor_range_min']} <span style="font-weight:400;font-size:.75rem">(Berisiko)</span>
+          </span>
+          <span style="color:#9aabb8">→</span>
+          <span style="background:#fef9e8;color:#c8890a;border:1px solid #f5e08a;border-radius:8px;padding:.2rem .7rem;font-weight:700;font-size:.88rem">
+            Aman: {r['info']['mn']} <span style="font-weight:400;font-size:.75rem">(Aman)</span>
+          </span>
+          <span style="color:#9aabb8">→</span>
+          <span style="background:#e8f5ee;color:#148a42;border:1px solid #8adbb8;border-radius:8px;padding:.2rem .7rem;font-weight:700;font-size:.88rem">
+            Max: {r['skor_range_max']} <span style="font-weight:400;font-size:.75rem">(Sangat Aman)</span>
+          </span>
+          <span style="background:#eef2fc;color:var(--accent);border:1px solid #aac0f0;border-radius:8px;padding:.2rem .9rem;font-weight:800;font-size:.92rem">
+            Skormu: <span style="color:{range_color}">{r['sw']:.0f}</span>
+          </span>
+        </div>
+      </div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="anim-div"></div>', unsafe_allow_html=True)
 
@@ -4032,7 +4130,7 @@ def page_result():
         with d1: st.metric("Skor Minimum Aman",r["info"]["mn"])
         with d2: st.metric("Skor Sangat Aman",r["info"]["mx"])
         with d3: st.metric("Skor Tertimbang Kamu",f"{r['sw']:.0f}",
-                            delta=f"{r['gap']:+.0f} vs minimum",
+                            delta=f"{r['gap']:+.0f} vs skor aman min",
                             delta_color="normal" if r["gap"]>=0 else "inverse")
 
     with t3:
@@ -4107,10 +4205,41 @@ def page_result():
                         bj=get_bobot(j); swj=hitung_tw(r["skor"],bj)
                         plj,_,pctj=hitung_peluang(swj,r["kampus"],j,r.get("jenjang","S1 (Sarjana)"))
                         st.markdown(f"""<div class="card" style="text-align:center;opacity:.75">
-                          <div style="font-size:.7rem;color:#6a7a95">Alternatif</div>
+                          <div style="font-size:.7rem;color:#6a7a95">Alternatif — {r['kampus']}</div>
                           <div style="font-weight:700;font-size:.87rem;margin:.2rem 0;color:#1a2540">{j}</div>
                           <div style="font-size:.75rem;color:#3a4a65">{plj} ({pctj:.0f}%)</div>
                         </div>""", unsafe_allow_html=True)
+
+            # Alternatif dari kampus berbeda
+            st.markdown('<div class="sec">🏛️ Jurusan Alternatif dari Kampus Lain</div>', unsafe_allow_html=True)
+            alt_lain = r.get("alt_kampus_lain", [])
+            if alt_lain:
+                for al in alt_lain:
+                    tag = "🟢 Aman" if al["pl"] in ("Aman","Sangat Aman") else "⚡ Kompetitif" if al["pl"]=="Kompetitif" else "🔴 Berisiko"
+                    lbl_jur = f"✅ Jurusan sama" if al["same_jurusan"] else "🔀 Jurusan sejenis"
+                    gap_txt = f"+{al['gap']:.0f}" if al["gap"]>=0 else f"{al['gap']:.0f}"
+                    st.markdown(f"""<div class="card" style="margin:.4rem 0;padding:.75rem 1.2rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+                      <div style="flex:1;min-width:200px">
+                        <div style="font-size:.7rem;color:#6a7a95;font-weight:600">{lbl_jur}</div>
+                        <div style="font-weight:700;font-size:.95rem;color:#1a2540;margin:.1rem 0">{al['jurusan']}</div>
+                        <div style="font-size:.82rem;color:#3a4a65">🏛️ {al['kampus']}</div>
+                      </div>
+                      <div style="text-align:center;min-width:80px">
+                        <div style="font-size:.7rem;color:#9aabb8">Skor Aman</div>
+                        <div style="font-weight:700;font-size:.92rem">{al['mn']}–{al['mx']}</div>
+                      </div>
+                      <div style="text-align:center;min-width:80px">
+                        <div style="font-size:.7rem;color:#9aabb8">Gap</div>
+                        <div style="font-weight:700;font-size:.92rem;color:{'#148a42' if al['gap']>=0 else '#c0392b'}">{gap_txt}</div>
+                      </div>
+                      <div style="text-align:center;min-width:100px">
+                        <div style="font-size:.7rem;color:#9aabb8">Status</div>
+                        <div style="font-weight:700;font-size:.82rem">{tag}</div>
+                        <div style="font-size:.72rem;color:#6a7a9a">{al['pct']:.0f}%</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="al al-i">Tidak ada data alternatif kampus lain untuk jurusan ini.</div>', unsafe_allow_html=True)
         else:
             st.markdown(f"""<div class="al al-w">
               <h4>⚡ Skor Belum Zona Aman — {r['jurusan']}</h4>
@@ -4123,7 +4252,7 @@ def page_result():
                 bj = get_bobot(j); swj = hitung_tw(r["skor"],bj)
                 plj,_,pctj = hitung_peluang(swj, r["kampus"], j, r.get("jenjang","S1 (Sarjana)"))
                 info_j = get_ptn_info(r["kampus"], j, r.get("jenjang","S1 (Sarjana)"))
-                with st.expander(f"📚 {j}  —  Skor: {swj:.0f}  |  {plj}  ({pctj:.0f}%)"):
+                with st.expander(f"📚 {j}  —  Skor: {swj:.0f}  |  {plj}  ({pctj:.0f}%)  · {r['kampus']}"):
                     ca2,cb2 = st.columns(2)
                     with ca2:
                         st.metric("Skor Tertimbang",f"{swj:.0f}")
@@ -4132,6 +4261,30 @@ def page_result():
                         bobot_chips(j)
                     with cb2:
                         ch_bobot(j, key=f"r_bobot_alt_{idx}")
+
+            # Alternatif dari kampus berbeda
+            st.markdown('<div class="sec">🏛️ Alternatif dari Kampus Lain</div>', unsafe_allow_html=True)
+            alt_lain = r.get("alt_kampus_lain", [])
+            if alt_lain:
+                for al in alt_lain:
+                    tag = "🟢 Aman" if al["pl"] in ("Aman","Sangat Aman") else "⚡ Kompetitif" if al["pl"]=="Kompetitif" else "🔴 Berisiko"
+                    lbl_jur = "✅ Jurusan sama" if al["same_jurusan"] else "🔀 Jurusan sejenis"
+                    gap_txt = f"+{al['gap']:.0f}" if al["gap"]>=0 else f"{al['gap']:.0f}"
+                    gap_col = "#148a42" if al["gap"]>=0 else "#c0392b"
+                    with st.expander(f"🏛️ {al['jurusan']} — {al['kampus']}  |  {tag}  ({al['pct']:.0f}%)"):
+                        cc1,cc2,cc3 = st.columns(3)
+                        with cc1:
+                            st.markdown(f"**{lbl_jur}**")
+                            st.metric("Kampus", al["kampus"])
+                            st.metric("Jurusan", al["jurusan"])
+                        with cc2:
+                            st.metric("Min Skor Aman", al["mn"])
+                            st.metric("Max Skor (Sangat Aman)", al["mx"])
+                        with cc3:
+                            st.metric("Status Peluang", f"{al['pl']}")
+                            st.metric("Gap vs Skor Aman Min", f"{gap_txt}", delta_color="normal" if al["gap"]>=0 else "inverse")
+            else:
+                st.markdown('<div class="al al-i">Tidak ada data alternatif kampus lain untuk jurusan ini.</div>', unsafe_allow_html=True)
 
     with t5:
         st.markdown('<div class="sec">🚀 Strategi Belajar Personal</div>', unsafe_allow_html=True)
