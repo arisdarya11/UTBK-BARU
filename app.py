@@ -489,6 +489,44 @@ def parse_rentang(r):
             pass
     return None, None
 
+# ── FILTER: hanya PTN (Perguruan Tinggi Negeri) ──
+_PTN_KEYWORDS_POSITIF = [
+    "negeri", "institut teknologi", "institut pertanian",
+    "universitas indonesia", "universitas gadjah mada",
+    "universitas airlangga", "universitas padjadjaran",
+    "universitas diponegoro", "universitas brawijaya",
+    "universitas sebelas maret", "universitas hasanuddin",
+    "universitas sumatera utara", "universitas andalas",
+    "universitas sriwijaya", "universitas udayana",
+    "universitas riau", "universitas jember",
+    "universitas mulawarman", "universitas syiah kuala",
+    "universitas sam ratulangi", "universitas lampung",
+    "politeknik negeri", "politeknik elektronika negeri",
+    "politeknik perkapalan negeri", "politeknik manufaktur negeri",
+]
+_PTS_KEYWORDS_NEGATIF = [
+    "swasta", "amikom", "bina nusantara", "mercu buana",
+    "trisakti", "pelita harapan", "atma jaya", "unika",
+    "unpas", "untar", "unisba", "ums ", "umy ", "unissula",
+    "uib ", "uii ", "umm ", "umsu", "prasetiya mulya",
+    "ciputra", "widyatama", "stmik", "stikes", "sekolah tinggi",
+    "akademi ", "itb-stei",
+]
+
+def is_ptn(nama: str) -> bool:
+    """Kembalikan True jika nama kampus terindikasi PTN (bukan PTS)."""
+    n = nama.lower().strip()
+    # Jika ada kata kunci PTS → langsung tolak
+    for kw in _PTS_KEYWORDS_NEGATIF:
+        if kw in n:
+            return False
+    # Jika ada kata kunci PTN → terima
+    for kw in _PTN_KEYWORDS_POSITIF:
+        if kw in n:
+            return True
+    # Default: tolak jika tidak cocok keyword PTN
+    return False
+
 @st.cache_data(ttl=3600)
 def load_database():
     import io
@@ -524,6 +562,8 @@ def load_database():
     ptn_s1 = {}
     for _, row in df_s1.iterrows():
         ptn = str(row['PTN']).strip()
+        if not is_ptn(ptn):          # ← filter: skip PTS
+            continue
         prodi = str(row['Prodi']).strip()
         mn, mx = parse_rentang(row['Rentang'])
         if mn is None:
@@ -546,6 +586,8 @@ def load_database():
     ptn_d4 = {}
     for _, row in df_d34.iterrows():
         ptn = str(row['PTN']).strip()
+        if not is_ptn(ptn):          # ← filter: skip PTS
+            continue
         prodi = str(row['Prodi']).strip()
         jenjang = str(row['Jenjang']).strip()
         mn, mx = parse_rentang(row['Rentang'])
