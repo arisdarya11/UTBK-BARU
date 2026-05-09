@@ -157,4 +157,4 @@ Proyek ini dikembangkan untuk keperluan edukasi. Silakan gunakan dan modifikasi 
 
 > 💡 *"Perjalanan menuju UTBK adalah maraton, bukan sprint. Tetap konsisten, percaya pada proses, dan jangan pernah menyerah pada impian kamu!"*
 
-Streamlit | https://utbk-ai.streamlit.app/
+Streamlit | [https://utbk-ai.streamlit.app/](https://ai-generate-kesiapan-utbk.streamlit.app/)
